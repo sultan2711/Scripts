@@ -1,0 +1,119 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local trackedKnives = {}
+local trackedGuns = {}
+
+local function getHighlight(target, name, color)
+    local highlight = target:FindFirstChild(name)
+    if not highlight then
+        highlight = Instance.new("Highlight")
+        highlight.Name = name
+        highlight.FillColor = color
+        highlight.OutlineColor = Color3.new(1, 1, 1) -- Белая обводка
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Видно сквозь стены
+        highlight.Parent = target
+    end
+    return highlight
+end
+
+local function removeHighlight(target, name)
+    local highlight = target:FindFirstChild(name)
+    if highlight then
+        highlight:Destroy()
+    end
+end
+
+-- Функция подсветки самого GunDrop
+local function highlightGunDropDirect(gunDropPart)
+    getHighlight(gunDropPart, "GunDropHighlight", Color3.new(1, 1, 0)).Enabled = true
+end
+
+-- Динамический скан всех карт на наличие упавшего пистолета
+local function scanForGun()
+    for _, child in pairs(Workspace:GetChildren()) do
+        if child:IsA("Model") then
+            local gun = child:FindFirstChild("GunDrop")
+            if gun and gun:IsA("BasePart") then
+                highlightGunDropDirect(gun)
+            end
+        end
+    end
+    
+    local directGun = Workspace:FindFirstChild("GunDrop")
+    if directGun and directGun:IsA("BasePart") then
+        highlightGunDropDirect(directGun)
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    -- Постоянно проверяем появление пистолета на любой карте
+    scanForGun()
+
+    -- Цикл подсветки игроков (Убийца / Шериф / Мирные)
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= Players.LocalPlayer and player.Character then
+            local hasKnife = false
+            local hasGun = false
+            local knifeLoc = ""
+            local gunLoc = ""
+            
+            if player:FindFirstChild("Backpack") then
+                if player.Backpack:FindFirstChild("Knife") then
+                    hasKnife = true
+                    knifeLoc = "Backpack"
+                end
+                if player.Backpack:FindFirstChild("Gun") then
+                    hasGun = true
+                    gunLoc = "Backpack"
+                end
+            end
+            
+            if player.Character:FindFirstChild("Knife") then
+                hasKnife = true
+                knifeLoc = "Character"
+            end
+            if player.Character:FindFirstChild("Gun") then
+                hasGun = true
+                gunLoc = "Character"
+            end
+            
+            -- Логика распределения цветов
+            if hasKnife then
+                removeHighlight(player.Character, "GunHighlight")
+                removeHighlight(player.Character, "DefaultHighlight")
+                getHighlight(player.Character, "KnifeHighlight", Color3.new(1, 0, 0)).Enabled = true
+                
+                if trackedKnives[player.UserId] ~= knifeLoc then
+                    trackedKnives[player.UserId] = knifeLoc
+                end
+            else
+                removeHighlight(player.Character, "KnifeHighlight")
+                if trackedKnives[player.UserId] then
+                    trackedKnives[player.UserId] = nil
+                end
+            end
+            
+            if hasGun and not hasKnife then
+                removeHighlight(player.Character, "DefaultHighlight")
+                getHighlight(player.Character, "GunHighlight", Color3.new(0, 0, 1)).Enabled = true
+                
+                if trackedGuns[player.UserId] ~= gunLoc then
+                    trackedGuns[player.UserId] = gunLoc
+                end
+            else
+                removeHighlight(player.Character, "GunHighlight")
+                if trackedGuns[player.UserId] then
+                    trackedGuns[player.UserId] = nil
+                end
+            end
+            
+            if not hasKnife and not hasGun then
+                getHighlight(player.Character, "DefaultHighlight", Color3.new(0, 1, 0)).Enabled = true
+            end
+        end
+    end
+end)
