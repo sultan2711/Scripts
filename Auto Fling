@@ -1,0 +1,190 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+
+local PLAYER = Players.LocalPlayer
+local CAMERA = Workspace.CurrentCamera
+local IS_FLINGING = false
+
+local ConnectionLoop
+local ConnectionAntiFling
+local savedCFrame = nil
+local tickCounter = 0 
+
+if CoreGui:FindFirstChild("FlingGui") then CoreGui.FlingGui:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "FlingGui"
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 200, 0, 110)
+MainFrame.Position = UDim2.new(0.5, -100, 0, 50)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderSizePixel = 0
+
+local TextBox = Instance.new("TextBox", MainFrame)
+TextBox.Size = UDim2.new(1, -20, 0, 30)
+TextBox.Position = UDim2.new(0, 10, 0, 15)
+TextBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+TextBox.PlaceholderText = "Player Name..."
+TextBox.Text = ""
+TextBox.TextColor3 = Color3.new(1, 1, 1)
+TextBox.Font = Enum.Font.SourceSans
+TextBox.TextSize = 16
+
+local StartBtn = Instance.new("TextButton", MainFrame)
+StartBtn.Size = UDim2.new(1, -20, 0, 35)
+StartBtn.Position = UDim2.new(0, 10, 0, 55)
+StartBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+StartBtn.Text = "START FLING"
+StartBtn.TextColor3 = Color3.new(1, 1, 1)
+StartBtn.Font = Enum.Font.SourceSansBold
+StartBtn.TextSize = 16
+
+local function getTarget()
+    local text = TextBox.Text:lower()
+    if text == "" then return nil end
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= PLAYER and (p.Name:lower():sub(1, #text) == text or p.DisplayName:lower():sub(1, #text) == text) then
+            return p
+        end
+    end
+    return nil
+end
+
+local function resetCamera()
+    local myChar = PLAYER.Character
+    local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+    if myHum then
+        CAMERA.CameraSubject = myHum
+    end
+end
+
+local function returnToSafety()
+    local myChar = PLAYER.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+    
+    if myHum then
+        myHum.PlatformStand = false
+        myHum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
+    
+    if myRoot and savedCFrame then
+        myRoot.CFrame = savedCFrame
+        myRoot.Velocity = Vector3.new(0, 0, 0)
+        myRoot.RotVelocity = Vector3.new(0, 0, 0)
+    end
+    savedCFrame = nil
+end
+
+local function toggleAntiFling(state)
+    if not state then
+        if ConnectionAntiFling then
+            ConnectionAntiFling:Disconnect()
+            ConnectionAntiFling = nil
+        end
+        return
+    end
+    
+    ConnectionAntiFling = RunService.Stepped:Connect(function()
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= PLAYER and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    root.CanCollide = false
+                end
+            end
+        end
+    end)
+end
+
+StartBtn.MouseButton1Click:Connect(function()
+    IS_FLINGING = not IS_FLINGING
+    
+    if IS_FLINGING then
+        local targetPlayer = getTarget()
+        if not targetPlayer then
+            IS_FLINGING = false
+            return
+        end
+        
+        local myChar = PLAYER.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if myRoot then
+            savedCFrame = myRoot.CFrame
+        end
+        
+        StartBtn.Text = "STOP"
+        StartBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+        tickCounter = 0
+        
+        toggleAntiFling(true)
+        
+        ConnectionLoop = RunService.Heartbeat:Connect(function()
+            myChar = PLAYER.Character
+            myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+            
+            local tChar = targetPlayer.Character
+            local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+            local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+            
+            if myRoot and tRoot and myHum and tHum and tHum.Health > 0 then
+                if CAMERA.CameraSubject ~= tHum then
+                    CAMERA.CameraSubject = tHum
+                end
+
+                if not myHum.PlatformStand then
+                    myHum.PlatformStand = true
+                    myHum:ChangeState(Enum.HumanoidStateType.Physics)
+                end
+
+                local predictionMultiplier = 0.35
+                local predictionOffset = tRoot.Velocity * predictionMultiplier
+                
+                if predictionOffset.Magnitude > 30 then
+                    predictionOffset = predictionOffset.Unit * 30
+                end
+
+                tickCounter = tickCounter + 1
+                
+                -- Быстрый наскок туда-сюда (амплитуда 4 студа, высокая частота)
+                local forwardVector = tRoot.CFrame.LookVector
+                local ramOffset = forwardVector * (math.cos(tickCounter * 0.8) * 4)
+                
+                local finalPosition = tRoot.Position + predictionOffset + ramOffset
+                
+                -- Бешеное вращение CFrame по всем трем осям (X, Y, Z)
+                local rX = math.rad((tickCounter * 75) % 360)
+                local rY = math.rad((tickCounter * 90) % 360)
+                local rZ = math.rad((tickCounter * 65) % 360)
+                
+                myRoot.CFrame = CFrame.new(finalPosition) * CFrame.Angles(rX, rY, rZ)
+                
+                -- Импульс движения
+                local moveDir = tRoot.Velocity.Magnitude > 0.1 and tRoot.Velocity.Unit or tRoot.CFrame.LookVector
+                myRoot.Velocity = moveDir * -7000
+                
+                -- Кручение физического тела во всех плоскостях одновременно
+                myRoot.RotVelocity = Vector3.new(500, 500, 500)
+            else
+                IS_FLINGING = false
+                StartBtn.Text = "START FLING"
+                StartBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+                if ConnectionLoop then ConnectionLoop:Disconnect() end
+                toggleAntiFling(false)
+                resetCamera()
+                returnToSafety()
+            end
+        end)
+    else
+        StartBtn.Text = "START FLING"
+        StartBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+        if ConnectionLoop then ConnectionLoop:Disconnect() end
+        toggleAntiFling(false)
+        resetCamera()
+        returnToSafety()
+    end
+end)
