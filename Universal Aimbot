@@ -1,0 +1,260 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+
+local PLAYER = Players.LocalPlayer
+local MOUSE = PLAYER:GetMouse()
+local CC = workspace.CurrentCamera
+
+local ENABLED = false
+local MASTER_SWITCH = true
+local FREE_FOR_ALL = true
+local AIM_AT = "Head"
+local WALL_CHECK = true
+local IGNORE_FRIENDS = false
+local IS_MINIMIZED = false
+
+local LOCKED_TARGET = nil
+local Running = true
+
+local function IsVisible(targetPart)
+    if not WALL_CHECK then return true end
+    local character = PLAYER.Character
+    if not character then return false end
+    
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {character, CoreGui}
+    
+    local origin = CC.CFrame.Position
+    local direction = (targetPart.Position - origin)
+    local result = workspace:Raycast(origin, direction, rayParams)
+    
+    if not result or result.Instance:IsDescendantOf(targetPart.Parent) then
+        return true
+    end
+    return false
+end
+
+local function GetNearestPlayerToMouse()
+    if LOCKED_TARGET and LOCKED_TARGET.Character then
+        local hum = LOCKED_TARGET.Character:FindFirstChild("Humanoid")
+        local part = LOCKED_TARGET.Character:FindFirstChild(AIM_AT)
+        if part and hum and hum.Health > 0 then
+            return LOCKED_TARGET
+        end
+    end
+
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local mousePos = Vector2.new(MOUSE.X, MOUSE.Y)
+    
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= PLAYER and v.Character then
+            local isEnemy = FREE_FOR_ALL or (v.Team ~= PLAYER.Team)
+            local isFriend = IGNORE_FRIENDS and PLAYER:IsFriendsWith(v.UserId)
+            
+            if isEnemy and not isFriend then
+                local humanoid = v.Character:FindFirstChild("Humanoid")
+                local aimPart = v.Character:FindFirstChild(AIM_AT)
+                
+                if aimPart and humanoid and humanoid.Health > 0 then
+                    local screenPos, onScreen = CC:WorldToViewportPoint(aimPart.Position)
+                    if onScreen then
+                        local targetPos = Vector2.new(screenPos.X, screenPos.Y)
+                        local distance = (mousePos - targetPos).Magnitude
+                        
+                        if distance < shortestDistance then
+                            if IsVisible(aimPart) then
+                                shortestDistance = distance
+                                closestPlayer = v
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+local GUI_MAIN = Instance.new('ScreenGui', CoreGui)
+GUI_MAIN.Name = 'AIMBOT_PRO'
+
+local MainFrame = Instance.new('Frame', GUI_MAIN)
+MainFrame.Size = UDim2.new(0, 220, 0, 230)
+MainFrame.Position = UDim2.new(0.5, -110, 0, 5)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BackgroundTransparency = 0.3
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+
+local Title = Instance.new('TextLabel', MainFrame)
+Title.Size = UDim2.new(1, -60, 0, 30)
+Title.Text = 'AIMBOT: READY'
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 22
+Title.BackgroundTransparency = 1
+
+local UnloadBtn = Instance.new('TextButton', MainFrame)
+UnloadBtn.Size = UDim2.new(0, 25, 0, 25)
+UnloadBtn.Position = UDim2.new(1, -27, 0, 2)
+UnloadBtn.Text = 'X'
+UnloadBtn.TextColor3 = Color3.new(1, 0.2, 0.2)
+UnloadBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+UnloadBtn.Font = Enum.Font.SourceSansBold
+UnloadBtn.TextSize = 18
+
+local MinBtn = Instance.new('TextButton', MainFrame)
+MinBtn.Size = UDim2.new(0, 25, 0, 25)
+MinBtn.Position = UDim2.new(1, -54, 0, 2)
+MinBtn.Text = '-'
+MinBtn.TextColor3 = Color3.new(1, 1, 1)
+MinBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+MinBtn.Font = Enum.Font.SourceSansBold
+MinBtn.TextSize = 18
+
+local Info = Instance.new('TextLabel', MainFrame)
+Info.Position = UDim2.new(0, 10, 0, 35)
+Info.Size = UDim2.new(1, -20, 0, 60)
+Info.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+Info.Font = Enum.Font.SourceSans
+Info.TextSize = 15
+Info.TextXAlignment = Enum.TextXAlignment.Left
+Info.BackgroundTransparency = 1
+Info.LineHeight = 1.1
+
+local ButtonFFA = Instance.new('TextButton', MainFrame)
+ButtonFFA.Size = UDim2.new(0.5, -12, 0, 30)
+ButtonFFA.Position = UDim2.new(0, 10, 0, 105)
+ButtonFFA.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+ButtonFFA.TextColor3 = Color3.new(1, 1, 1)
+ButtonFFA.Font = Enum.Font.SourceSansBold
+ButtonFFA.TextSize = 14
+ButtonFFA.Text = "FFA: ON"
+
+local ButtonWall = Instance.new('TextButton', MainFrame)
+ButtonWall.Size = UDim2.new(0.5, -12, 0, 30)
+ButtonWall.Position = UDim2.new(0.5, 2, 0, 105)
+ButtonWall.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+ButtonWall.TextColor3 = Color3.new(1, 1, 1)
+ButtonWall.Font = Enum.Font.SourceSansBold
+ButtonWall.TextSize = 14
+ButtonWall.Text = "WALL: ON"
+
+local ButtonFriends = Instance.new('TextButton', MainFrame)
+ButtonFriends.Size = UDim2.new(1, -20, 0, 30)
+ButtonFriends.Position = UDim2.new(0, 10, 0, 140)
+ButtonFriends.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+ButtonFriends.TextColor3 = Color3.new(1, 1, 1)
+ButtonFriends.Font = Enum.Font.SourceSansBold
+ButtonFriends.TextSize = 14
+ButtonFriends.Text = "IGNORE FRIENDS: OFF"
+
+local ButtonMaster = Instance.new('TextButton', MainFrame)
+ButtonMaster.Size = UDim2.new(1, -20, 0, 35)
+ButtonMaster.Position = UDim2.new(0, 10, 0, 180)
+ButtonMaster.BackgroundColor3 = Color3.fromRGB(0, 80, 0)
+ButtonMaster.TextColor3 = Color3.new(1, 1, 1)
+ButtonMaster.Font = Enum.Font.SourceSansBold
+ButtonMaster.TextSize = 16
+ButtonMaster.Text = "SYSTEM: ON"
+
+local function UpdateGUI(targetName)
+    if not Running then return end
+    
+    if not MASTER_SWITCH then
+        Title.Text = "SYSTEM OFF"
+        Title.TextColor3 = Color3.new(1, 0.3, 0.3)
+    else
+        Title.Text = targetName and ("LOCKED: " .. targetName:sub(1, 10)) or (ENABLED and "SCANNING..." or "READY")
+        Title.TextColor3 = targetName and Color3.new(0.3, 1, 0.3) or Color3.new(1, 1, 1)
+    end
+    
+    Info.Text = string.format(
+        "Team Check: %s\nWall Check: %s\nIgnore Friends: %s",
+        FREE_FOR_ALL and "OFF" or "ON",
+        WALL_CHECK and "ON" or "OFF",
+        IGNORE_FRIENDS and "ON" or "OFF"
+    )
+    
+    ButtonFFA.Text = "FFA: " .. (FREE_FOR_ALL and "ON" or "OFF")
+    ButtonWall.Text = "WALL: " .. (WALL_CHECK and "ON" or "OFF")
+    ButtonFriends.Text = "FRIENDS: " .. (IGNORE_FRIENDS and "ON" or "OFF")
+    ButtonMaster.Text = "SYSTEM: " .. (MASTER_SWITCH and "ON" or "OFF")
+    ButtonMaster.BackgroundColor3 = MASTER_SWITCH and Color3.fromRGB(0, 80, 0) or Color3.fromRGB(80, 0, 0)
+end
+
+MinBtn.MouseButton1Click:Connect(function()
+    IS_MINIMIZED = not IS_MINIMIZED
+    if IS_MINIMIZED then
+        MainFrame.Size = UDim2.new(0, 220, 0, 30)
+        MinBtn.Text = "+"
+    else
+        MainFrame.Size = UDim2.new(0, 220, 0, 230)
+        MinBtn.Text = "-"
+    end
+end)
+
+ButtonFFA.MouseButton1Click:Connect(function()
+    FREE_FOR_ALL = not FREE_FOR_ALL
+    UpdateGUI(LOCKED_TARGET and LOCKED_TARGET.Name)
+end)
+
+ButtonWall.MouseButton1Click:Connect(function()
+    WALL_CHECK = not WALL_CHECK
+    UpdateGUI(LOCKED_TARGET and LOCKED_TARGET.Name)
+end)
+
+ButtonFriends.MouseButton1Click:Connect(function()
+    IGNORE_FRIENDS = not IGNORE_FRIENDS
+    UpdateGUI(LOCKED_TARGET and LOCKED_TARGET.Name)
+end)
+
+ButtonMaster.MouseButton1Click:Connect(function()
+    MASTER_SWITCH = not MASTER_SWITCH
+    if not MASTER_SWITCH then
+        ENABLED = false
+        LOCKED_TARGET = nil
+    end
+    UpdateGUI(nil)
+end)
+
+UnloadBtn.MouseButton1Click:Connect(function()
+    Running = false
+    ENABLED = false
+    LOCKED_TARGET = nil
+    GUI_MAIN:Destroy()
+end)
+
+MOUSE.Button2Down:Connect(function()
+    if Running and MASTER_SWITCH then
+        ENABLED = true
+    end
+end)
+
+MOUSE.Button2Up:Connect(function()
+    if Running then
+        ENABLED = false
+        LOCKED_TARGET = nil
+        UpdateGUI(nil)
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if Running and MASTER_SWITCH and ENABLED then
+        LOCKED_TARGET = GetNearestPlayerToMouse()
+        if LOCKED_TARGET then
+            local AIM = LOCKED_TARGET.Character:FindFirstChild(AIM_AT)
+            if AIM then
+                CC.CFrame = CFrame.new(CC.CFrame.Position, AIM.Position)
+            end
+            UpdateGUI(LOCKED_TARGET.Name)
+        else
+            UpdateGUI(nil)
+        end
+    end
+end)
+
+UpdateGUI()
