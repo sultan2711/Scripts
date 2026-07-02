@@ -1,0 +1,130 @@
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local LP = Players.LocalPlayer
+local ParticlesFolder = workspace:WaitForChild("Particles")
+
+local IsRunning = true
+local AFK_POS = Vector3.new(-72, 433, 62)
+local Blacklist = {}
+
+if CoreGui:FindFirstChild("MegaFarmGui") then CoreGui.MegaFarmGui:Destroy() end
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "MegaFarmGui"
+
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 130, 0, 40)
+Frame.Position = UDim2.new(0.5, -65, 0, 20)
+Frame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+Frame.BorderSizePixel = 0
+
+local Title = Instance.new("TextLabel", Frame)
+Title.Size = UDim2.new(0.75, 0, 1, 0)
+Title.Text = "MEGA FARM"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 14
+
+local CloseBtn = Instance.new("TextButton", Frame)
+CloseBtn.Size = UDim2.new(0.25, 0, 1, 0)
+CloseBtn.Position = UDim2.new(0.75, 0, 0, 0)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.SourceSansBold
+
+local function stopFarming()
+    IsRunning = false
+    ScreenGui:Destroy()
+end
+
+CloseBtn.MouseButton1Click:Connect(stopFarming)
+
+local function getRoot()
+    return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid()
+    return LP.Character and LP.Character:FindFirstChild("Humanoid")
+end
+
+local function collect(item)
+    if not IsRunning or Blacklist[item] then return end
+
+    local root = getRoot()
+    local hum = getHumanoid()
+    
+    while (not root or not hum) and IsRunning do
+        task.wait(0.1)
+        root = getRoot()
+        hum = getHumanoid()
+    end
+    
+    if not root or not item:IsA("BasePart") or item.Name ~= "Cash" then return end
+
+    local counter = 0
+    local lastJump = tick()
+    local startTime = tick()
+
+    repeat
+        if not IsRunning then break end
+        
+        if tick() - startTime > 3 then
+            Blacklist[item] = true
+            task.delay(10, function()
+                Blacklist[item] = nil
+            end)
+            break
+        end
+
+        root = getRoot()
+        hum = getHumanoid()
+
+        if root and hum then
+            if tick() - lastJump >= 1 then
+                hum.Jump = true
+                lastJump = tick()
+            end
+
+            local offset = math.sin(counter) * 5
+            local rotX = math.cos(counter) * 180
+            local rotY = counter * 150
+            local rotZ = math.sin(counter) * 180
+            
+            root.CFrame = item.CFrame * CFrame.new(offset, 0, 0) * CFrame.Angles(math.rad(rotX), math.rad(rotY), math.rad(rotZ))
+            counter = counter + 0.3
+        end
+        task.wait()
+    until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item]
+end
+
+task.spawn(function()
+    while IsRunning do
+        local root = getRoot()
+        if root then
+            local cashItems = {}
+            for _, v in pairs(ParticlesFolder:GetChildren()) do
+                if v.Name == "Cash" and not Blacklist[v] then 
+                    table.insert(cashItems, v) 
+                end
+            end
+
+            if #cashItems == 0 then
+                root.CFrame = CFrame.new(AFK_POS)
+            else
+                for _, item in pairs(cashItems) do
+                    if not IsRunning or Blacklist[item] then break end
+                    collect(item)
+                end
+            end
+        end
+        task.wait(0.1)
+    end
+end)
+
+ParticlesFolder.ChildAdded:Connect(function(child)
+    if IsRunning and child.Name == "Cash" then
+        task.wait(0.05)
+        collect(child)
+    end
+end)
