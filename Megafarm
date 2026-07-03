@@ -6,6 +6,7 @@ local ParticlesFolder = workspace:WaitForChild("Particles")
 local IsRunning = true
 local AFK_POS = Vector3.new(287, -40, -16)
 local Blacklist = {}
+local PermanentBlacklist = {} 
 
 if CoreGui:FindFirstChild("MegaFarmGui") then CoreGui.MegaFarmGui:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
@@ -33,13 +34,6 @@ CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 CloseBtn.Font = Enum.Font.SourceSansBold
 
-local function stopFarming()
-    IsRunning = false
-    ScreenGui:Destroy()
-end
-
-CloseBtn.MouseButton1Click:Connect(stopFarming)
-
 local function getRoot()
     return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
 end
@@ -48,8 +42,17 @@ local function getHumanoid()
     return LP.Character and LP.Character:FindFirstChild("Humanoid")
 end
 
+local function stopFarming()
+    IsRunning = false
+    local root = getRoot()
+    if root then root.Anchored = false end -- Снимаем якорь при закрытии
+    ScreenGui:Destroy()
+end
+
+CloseBtn.MouseButton1Click:Connect(stopFarming)
+
 local function collect(item)
-    if not IsRunning or Blacklist[item] then return end
+    if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then return end
 
     local root = getRoot()
     local hum = getHumanoid()
@@ -62,6 +65,9 @@ local function collect(item)
     
     if not root or not item:IsA("BasePart") or item.Name ~= "Cash" then return end
 
+    -- Снимаем якорь перед началом сбора монеты
+    root.Anchored = false
+
     local counter = 0
     local lastJump = tick()
     local startTime = tick()
@@ -69,6 +75,11 @@ local function collect(item)
     repeat
         if not IsRunning then break end
         
+        if hum and hum.Health <= 0 then
+            PermanentBlacklist[item] = true 
+            break
+        end
+
         if tick() - startTime > 3 then
             Blacklist[item] = true
             task.delay(10, function()
@@ -95,30 +106,57 @@ local function collect(item)
             counter = counter + 0.3
         end
         task.wait()
-    until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item]
+    until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
 end
 
+-- Поток авто-ресета каждые 2 минуты
+task.spawn(function()
+    while IsRunning do
+        task.wait(120)
+        if IsRunning then
+            local hum = getHumanoid()
+            local root = getRoot()
+            if hum and hum.Health > 0 then
+                if root then root.Anchored = false end -- Отпускаем перед смертью, чтобы не багался спавн
+                hum.Health = 0
+            end
+        end
+    end
+end)
+
+-- Жесткий цикл фиксации позиции
 task.spawn(function()
     while IsRunning do
         local root = getRoot()
-        if root then
+        local hum = getHumanoid()
+        
+        if root and hum and hum.Health > 0 then
             local cashItems = {}
             for _, v in pairs(ParticlesFolder:GetChildren()) do
-                if v.Name == "Cash" and not Blacklist[v] then 
+                if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
                     table.insert(cashItems, v) 
                 end
             end
 
             if #cashItems == 0 then
+                -- Полная остановка физики тела и жесткое удержание позиции
+                root.Velocity = Vector3.new(0, 0, 0)
+                root.RotVelocity = Vector3.new(0, 0, 0)
                 root.CFrame = CFrame.new(AFK_POS)
+                root.Anchored = true -- Вмораживаем в точку
+                task.wait()
             else
+                -- Если монеты есть, снимаем якорь и идем собирать
+                root.Anchored = false
                 for _, item in pairs(cashItems) do
-                    if not IsRunning or Blacklist[item] then break end
+                    if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then break end
                     collect(item)
                 end
+                task.wait()
             end
+        else
+            task.wait(0.1)
         end
-        task.wait(0.1)
     end
 end)
 
