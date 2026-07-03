@@ -11,10 +11,10 @@ local function getHighlight(target, name, color)
         highlight = Instance.new("Highlight")
         highlight.Name = name
         highlight.FillColor = color
-        highlight.OutlineColor = Color3.new(1, 1, 1) -- Белая обводка
+        highlight.OutlineColor = Color3.new(1, 1, 1)
         highlight.FillTransparency = 0.5
         highlight.OutlineTransparency = 0
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Видно сквозь стены
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Parent = target
     end
     return highlight
@@ -27,12 +27,10 @@ local function removeHighlight(target, name)
     end
 end
 
--- Функция подсветки самого GunDrop
 local function highlightGunDropDirect(gunDropPart)
     getHighlight(gunDropPart, "GunDropHighlight", Color3.new(1, 1, 0)).Enabled = true
 end
 
--- Динамический скан всех карт на наличие упавшего пистолета
 local function scanForGun()
     for _, child in pairs(Workspace:GetChildren()) do
         if child:IsA("Model") then
@@ -50,10 +48,8 @@ local function scanForGun()
 end
 
 RunService.Heartbeat:Connect(function()
-    -- Постоянно проверяем появление пистолета на любой карте
     scanForGun()
 
-    -- Цикл подсветки игроков (Убийца / Шериф / Мирные)
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= Players.LocalPlayer and player.Character then
             local hasKnife = false
@@ -81,7 +77,6 @@ RunService.Heartbeat:Connect(function()
                 gunLoc = "Character"
             end
             
-            -- Логика распределения цветов
             if hasKnife then
                 removeHighlight(player.Character, "GunHighlight")
                 removeHighlight(player.Character, "DefaultHighlight")
