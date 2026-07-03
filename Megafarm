@@ -80,17 +80,15 @@ end
 if LP.Character then task.spawn(onCharacterAdded, LP.Character) end
 LP.CharacterAdded:Connect(onCharacterAdded)
 
--- Абсолютно независимый поток авто-прыжка каждую секунду
 task.spawn(function()
     while IsRunning do
         local hum = getHumanoid()
-        -- Прыгаем только если персонаж жив
         if hum and hum.Health > 0 then
             VIM:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-            task.wait(0.05) -- Удерживаем клавишу микро-мгновение
+            task.wait(0.05)
             VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
         end
-        task.wait(1) -- Интервал ровно в 1 секунду
+        task.wait(1)
     end
 end)
 
@@ -134,7 +132,14 @@ local function collect(item)
         root = getRoot()
         hum = getHumanoid()
 
-        if root and hum then
+        if root and hum and item.Parent then
+            -- Принудительный спам события касания (0 — начало касания, 1 — конец касания)
+            if typeof(firetouchinterest) == "function" then
+                firetouchinterest(root, item, 0)
+                task.wait()
+                firetouchinterest(root, item, 1)
+            end
+
             local offset = math.sin(counter) * 5
             local rotX = math.cos(counter) * 180
             local rotY = counter * 150
