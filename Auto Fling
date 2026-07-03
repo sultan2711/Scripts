@@ -128,7 +128,6 @@ StartBtn.MouseButton1Click:Connect(function()
             myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
             local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
             
-            -- Если наш собственный персонаж пропал или умер, аварийно выключаем
             if not myRoot or not myHum or myHum.Health <= 0 then
                 IS_FLINGING = false
                 StartBtn.Text = "START FLING"
@@ -144,9 +143,7 @@ StartBtn.MouseButton1Click:Connect(function()
             local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
             local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
             
-            -- Проверяем, жива ли цель и загружены ли ее физические части
             if tRoot and tHum and tHum.Health > 0 then
-                -- Если цель только что зареспавнилась, обновляем точку безопасности на текущую стабильную
                 if wasWaitingForRespawn then
                     savedCFrame = myRoot.CFrame
                     wasWaitingForRespawn = false
@@ -175,18 +172,14 @@ StartBtn.MouseButton1Click:Connect(function()
                 
                 local finalPosition = tRoot.Position + predictionOffset + ramOffset
                 
-                local rX = math.rad((tickCounter * 75) % 360)
-                local rY = math.rad((tickCounter * 90) % 360)
-                local rZ = math.rad((tickCounter * 65) % 360)
+                -- Персонаж больше не крутится визуально, CFrame сохраняет нормальную ориентацию цели
+                myRoot.CFrame = CFrame.new(finalPosition, finalPosition + forwardVector)
                 
-                myRoot.CFrame = CFrame.new(finalPosition) * CFrame.Angles(rX, rY, rZ)
-                
+                -- Оставляем скрытые физические силы (бешеная инерция для флинга)
                 local moveDir = tRoot.Velocity.Magnitude > 0.1 and tRoot.Velocity.Unit or tRoot.CFrame.LookVector
                 myRoot.Velocity = moveDir * -7000
-                
                 myRoot.RotVelocity = Vector3.new(500, 500, 500)
             else
-                -- Сюда скрипт попадает, если цель мертва или респавнится прямо сейчас
                 wasWaitingForRespawn = true
                 resetCamera()
                 returnToSafety()
