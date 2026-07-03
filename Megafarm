@@ -35,6 +35,8 @@ CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 CloseBtn.Font = Enum.Font.SourceSansBold
 
+print("[MEGA FARM] Скрипт успешно запущен. AFK Позиция:", tostring(AFK_POS))
+
 local function getRoot()
     return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
 end
@@ -45,6 +47,7 @@ end
 
 local function stopFarming()
     IsRunning = false
+    print("[MEGA FARM] Фарм остановлен пользователем.")
     ScreenGui:Destroy()
 end
 
@@ -52,6 +55,7 @@ CloseBtn.MouseButton1Click:Connect(stopFarming)
 
 local function onCharacterAdded(char)
     if not IsRunning then return end
+    print("[MEGA FARM] Обнаружен респавн персонажа. Ожидание RootPart...")
     local root = char:WaitForChild("HumanoidRootPart", 5)
     if root then
         local cashItems = {}
@@ -61,6 +65,7 @@ local function onCharacterAdded(char)
             end
         end
         if #cashItems == 0 then
+            print("[MEGA FARM] Монет нет. Мгновенный перенос нового персонажа на AFK позицию.")
             root.Velocity = Vector3.new(0, 0, 0)
             root.CFrame = CFrame.new(AFK_POS)
         end
@@ -84,6 +89,7 @@ local function collect(item)
     
     if not root or not item:IsA("BasePart") or item.Name ~= "Cash" then return end
 
+    print("[MEGA FARM] Начало сбора купюры:", item:GetDebugId(4))
     local counter = 0
     local startTime = tick()
 
@@ -91,14 +97,19 @@ local function collect(item)
         if not IsRunning then break end
         
         if hum and hum.Health <= 0 then
+            warn("[MEGA FARM] Персонаж погиб во время сбора! Монета добавлена в PERMANENT BLACKLIST:", item:GetDebugId(4))
             PermanentBlacklist[item] = true 
             break
         end
 
         if tick() - startTime > 3 then
+            warn("[MEGA FARM] Превышен таймаут сбора (3 сек). Монета добавлена во временный блеклист на 10 сек:", item:GetDebugId(4))
             Blacklist[item] = true
             task.delay(10, function()
-                Blacklist[item] = nil
+                if Blacklist[item] then
+                    Blacklist[item] = nil
+                    print("[MEGA FARM] Временный блеклист снят для монеты:", item:GetDebugId(4))
+                end
             end)
             break
         end
@@ -117,6 +128,10 @@ local function collect(item)
         end
         task.wait()
     until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
+
+    if IsRunning and not Blacklist[item] and not PermanentBlacklist[item] then
+        print("[MEGA FARM] Купюра успешно собрана или исчезла.")
+    end
 end
 
 -- Основной цикл сбора и проверки купюр
@@ -134,6 +149,7 @@ task.spawn(function()
             end
 
             if #cashItems > 0 then
+                print("[MEGA FARM] Найдено доступных купюр на карте:", #cashItems)
                 for _, item in pairs(cashItems) do
                     if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then break end
                     collect(item)
@@ -145,6 +161,7 @@ task.spawn(function()
 end)
 
 -- Жесткий покадровый телепорт в AFK позицию, если нет активных купюр
+local isAlreadyAFK = false
 RunService.Heartbeat:Connect(function()
     if not IsRunning then return end
     
@@ -160,15 +177,22 @@ RunService.Heartbeat:Connect(function()
         end
 
         if #cashItems == 0 then
+            if not isAlreadyAFK then
+                print("[MEGA FARM] На карте нет монет. Удержание AFK позиции.")
+                isAlreadyAFK = true
+            end
             root.Velocity = Vector3.new(0, 0, 0)
             root.RotVelocity = Vector3.new(0, 0, 0)
             root.CFrame = CFrame.new(AFK_POS)
+        else
+            isAlreadyAFK = false
         end
     end
 end)
 
 ParticlesFolder.ChildAdded:Connect(function(child)
     if IsRunning and child.Name == "Cash" then
+        print("[MEGA FARM] Обнаружена новая купюра в папке Particles:", child:GetDebugId(4))
         task.wait(0.05)
         collect(child)
     end
