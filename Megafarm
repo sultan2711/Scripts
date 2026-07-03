@@ -133,11 +133,11 @@ local function collect(item)
         hum = getHumanoid()
 
         if root and hum and item.Parent then
-            -- Принудительный спам события касания (0 — начало касания, 1 — конец касания)
+            -- Безумный спам тач-интереста без искусственных задержек
             if typeof(firetouchinterest) == "function" then
                 firetouchinterest(root, item, 0)
-                task.wait()
                 firetouchinterest(root, item, 1)
+                firetouchinterest(root, item, 0)
             end
 
             local offset = math.sin(counter) * 5
