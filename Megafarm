@@ -50,19 +50,16 @@ end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
 
--- Жесткий перехват при возрождении (мгновенный телепорт нового персонажа)
 local function onCharacterAdded(char)
     if not IsRunning then return end
     local root = char:WaitForChild("HumanoidRootPart", 5)
     if root then
-        -- Проверяем, есть ли на карте купюры прямо сейчас
         local cashItems = {}
         for _, v in pairs(ParticlesFolder:GetChildren()) do
             if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
                 table.insert(cashItems, v) 
             end
         end
-        -- Если купюр нет, швыряем на AFK координаты сразу при спавне
         if #cashItems == 0 then
             root.Velocity = Vector3.new(0, 0, 0)
             root.CFrame = CFrame.new(AFK_POS)
@@ -88,7 +85,6 @@ local function collect(item)
     if not root or not item:IsA("BasePart") or item.Name ~= "Cash" then return end
 
     local counter = 0
-    local lastJump = tick()
     local startTime = tick()
 
     repeat
@@ -111,11 +107,6 @@ local function collect(item)
         hum = getHumanoid()
 
         if root and hum then
-            if tick() - lastJump >= 1 then
-                hum.Jump = true
-                lastJump = tick()
-            end
-
             local offset = math.sin(counter) * 5
             local rotX = math.cos(counter) * 180
             local rotY = counter * 150
@@ -127,19 +118,6 @@ local function collect(item)
         task.wait()
     until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
 end
-
--- Поток авто-ресета каждые 2 минуты
-task.spawn(function()
-    while IsRunning do
-        task.wait(120)
-        if IsRunning then
-            local hum = getHumanoid()
-            if hum and hum.Health > 0 then
-                hum.Health = 0
-            end
-        end
-    end
-end)
 
 -- Основной цикл сбора и проверки купюр
 task.spawn(function()
