@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
 local LP = Players.LocalPlayer
 local ParticlesFolder = workspace:WaitForChild("Particles")
 
@@ -44,12 +45,33 @@ end
 
 local function stopFarming()
     IsRunning = false
-    local root = getRoot()
-    if root then root.Anchored = false end -- Снимаем якорь при закрытии
     ScreenGui:Destroy()
 end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
+
+-- Жесткий перехват при возрождении (мгновенный телепорт нового персонажа)
+local function onCharacterAdded(char)
+    if not IsRunning then return end
+    local root = char:WaitForChild("HumanoidRootPart", 5)
+    if root then
+        -- Проверяем, есть ли на карте купюры прямо сейчас
+        local cashItems = {}
+        for _, v in pairs(ParticlesFolder:GetChildren()) do
+            if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
+                table.insert(cashItems, v) 
+            end
+        end
+        -- Если купюр нет, швыряем на AFK координаты сразу при спавне
+        if #cashItems == 0 then
+            root.Velocity = Vector3.new(0, 0, 0)
+            root.CFrame = CFrame.new(AFK_POS)
+        end
+    end
+end
+
+if LP.Character then task.spawn(onCharacterAdded, LP.Character) end
+LP.CharacterAdded:Connect(onCharacterAdded)
 
 local function collect(item)
     if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then return end
@@ -64,9 +86,6 @@ local function collect(item)
     end
     
     if not root or not item:IsA("BasePart") or item.Name ~= "Cash" then return end
-
-    -- Снимаем якорь перед началом сбора монеты
-    root.Anchored = false
 
     local counter = 0
     local lastJump = tick()
@@ -115,16 +134,14 @@ task.spawn(function()
         task.wait(120)
         if IsRunning then
             local hum = getHumanoid()
-            local root = getRoot()
             if hum and hum.Health > 0 then
-                if root then root.Anchored = false end -- Отпускаем перед смертью, чтобы не багался спавн
                 hum.Health = 0
             end
         end
     end
 end)
 
--- Жесткий цикл фиксации позиции
+-- Основной цикл сбора и проверки купюр
 task.spawn(function()
     while IsRunning do
         local root = getRoot()
@@ -138,24 +155,36 @@ task.spawn(function()
                 end
             end
 
-            if #cashItems == 0 then
-                -- Полная остановка физики тела и жесткое удержание позиции
-                root.Velocity = Vector3.new(0, 0, 0)
-                root.RotVelocity = Vector3.new(0, 0, 0)
-                root.CFrame = CFrame.new(AFK_POS)
-                root.Anchored = true -- Вмораживаем в точку
-                task.wait()
-            else
-                -- Если монеты есть, снимаем якорь и идем собирать
-                root.Anchored = false
+            if #cashItems > 0 then
                 for _, item in pairs(cashItems) do
                     if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then break end
                     collect(item)
                 end
-                task.wait()
             end
-        else
-            task.wait(0.1)
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- Жесткий покадровый телепорт в AFK позицию, если нет активных купюр
+RunService.Heartbeat:Connect(function()
+    if not IsRunning then return end
+    
+    local root = getRoot()
+    local hum = getHumanoid()
+    
+    if root and hum and hum.Health > 0 then
+        local cashItems = {}
+        for _, v in pairs(ParticlesFolder:GetChildren()) do
+            if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
+                table.insert(cashItems, v) 
+            end
+        end
+
+        if #cashItems == 0 then
+            root.Velocity = Vector3.new(0, 0, 0)
+            root.RotVelocity = Vector3.new(0, 0, 0)
+            root.CFrame = CFrame.new(AFK_POS)
         end
     end
 end)
