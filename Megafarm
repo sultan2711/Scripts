@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
+local VIM = game:GetService("VirtualInputManager")
 local LP = Players.LocalPlayer
 local ParticlesFolder = workspace:WaitForChild("Particles")
 
@@ -53,7 +54,6 @@ end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
 
--- Функция получения только валидных, существующих купюр
 local function getValidCash()
     local validItems = {}
     for _, v in pairs(ParticlesFolder:GetChildren()) do
@@ -79,6 +79,20 @@ end
 
 if LP.Character then task.spawn(onCharacterAdded, LP.Character) end
 LP.CharacterAdded:Connect(onCharacterAdded)
+
+-- Абсолютно независимый поток авто-прыжка каждую секунду
+task.spawn(function()
+    while IsRunning do
+        local hum = getHumanoid()
+        -- Прыгаем только если персонаж жив
+        if hum and hum.Health > 0 then
+            VIM:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+            task.wait(0.05) -- Удерживаем клавишу микро-мгновение
+            VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+        end
+        task.wait(1) -- Интервал ровно в 1 секунду
+    end
+end)
 
 local function collect(item)
     if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then return end
@@ -144,7 +158,6 @@ task.spawn(function()
             local cashItems = getValidCash()
 
             if #cashItems > 0 then
-                -- Логируем только если количество реально изменилось, чтобы не спамить в консоль
                 if #cashItems ~= lastCount then
                     print("[MEGA FARM] Найдено реальных купюр на карте:", #cashItems)
                     lastCount = #cashItems
@@ -158,7 +171,7 @@ task.spawn(function()
                 lastCount = 0
             end
         end
-        task.wait(0.2) -- Чуть увеличили задержку проверки, чтобы снизить нагрузку
+        task.wait(0.2)
     end
 end)
 
