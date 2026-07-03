@@ -53,17 +53,22 @@ end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
 
+-- Функция получения только валидных, существующих купюр
+local function getValidCash()
+    local validItems = {}
+    for _, v in pairs(ParticlesFolder:GetChildren()) do
+        if v.Name == "Cash" and v:IsA("BasePart") and v.Parent and not Blacklist[v] and not PermanentBlacklist[v] then 
+            table.insert(validItems, v) 
+        end
+    end
+    return validItems
+end
+
 local function onCharacterAdded(char)
     if not IsRunning then return end
-    print("[MEGA FARM] Обнаружен респавн персонажа. Ожидание RootPart...")
     local root = char:WaitForChild("HumanoidRootPart", 5)
     if root then
-        local cashItems = {}
-        for _, v in pairs(ParticlesFolder:GetChildren()) do
-            if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
-                table.insert(cashItems, v) 
-            end
-        end
+        local cashItems = getValidCash()
         if #cashItems == 0 then
             print("[MEGA FARM] Монет нет. Мгновенный перенос нового персонажа на AFK позицию.")
             root.Velocity = Vector3.new(0, 0, 0)
@@ -87,7 +92,7 @@ local function collect(item)
         hum = getHumanoid()
     end
     
-    if not root or not item:IsA("BasePart") or item.Name ~= "Cash" then return end
+    if not root or not item:IsA("BasePart") or not item.Parent then return end
 
     print("[MEGA FARM] Начало сбора купюры:", item:GetDebugId(4))
     local counter = 0
@@ -106,10 +111,8 @@ local function collect(item)
             warn("[MEGA FARM] Превышен таймаут сбора (3 сек). Монета добавлена во временный блеклист на 10 сек:", item:GetDebugId(4))
             Blacklist[item] = true
             task.delay(10, function()
-                if Blacklist[item] then
-                    Blacklist[item] = nil
-                    print("[MEGA FARM] Временный блеклист снят для монеты:", item:GetDebugId(4))
-                end
+                Blacklist[item] = nil
+                print("[MEGA FARM] Временный блеклист снят для монеты:", item:GetDebugId(4))
             end)
             break
         end
@@ -128,35 +131,34 @@ local function collect(item)
         end
         task.wait()
     until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
-
-    if IsRunning and not Blacklist[item] and not PermanentBlacklist[item] then
-        print("[MEGA FARM] Купюра успешно собрана или исчезла.")
-    end
 end
 
--- Основной цикл сбора и проверки купюр
+-- Основной цикл сбора
 task.spawn(function()
+    local lastCount = -1
     while IsRunning do
         local root = getRoot()
         local hum = getHumanoid()
         
         if root and hum and hum.Health > 0 then
-            local cashItems = {}
-            for _, v in pairs(ParticlesFolder:GetChildren()) do
-                if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
-                    table.insert(cashItems, v) 
-                end
-            end
+            local cashItems = getValidCash()
 
             if #cashItems > 0 then
-                print("[MEGA FARM] Найдено доступных купюр на карте:", #cashItems)
+                -- Логируем только если количество реально изменилось, чтобы не спамить в консоль
+                if #cashItems ~= lastCount then
+                    print("[MEGA FARM] Найдено реальных купюр на карте:", #cashItems)
+                    lastCount = #cashItems
+                end
+                
                 for _, item in pairs(cashItems) do
                     if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then break end
                     collect(item)
                 end
+            else
+                lastCount = 0
             end
         end
-        task.wait(0.1)
+        task.wait(0.2) -- Чуть увеличили задержку проверки, чтобы снизить нагрузку
     end
 end)
 
@@ -169,16 +171,11 @@ RunService.Heartbeat:Connect(function()
     local hum = getHumanoid()
     
     if root and hum and hum.Health > 0 then
-        local cashItems = {}
-        for _, v in pairs(ParticlesFolder:GetChildren()) do
-            if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
-                table.insert(cashItems, v) 
-            end
-        end
+        local cashItems = getValidCash()
 
         if #cashItems == 0 then
             if not isAlreadyAFK then
-                print("[MEGA FARM] На карте нет монет. Удержание AFK позиции.")
+                print("[MEGA FARM] На карте нет реальных монет. Удержание AFK позиции.")
                 isAlreadyAFK = true
             end
             root.Velocity = Vector3.new(0, 0, 0)
@@ -192,8 +189,10 @@ end)
 
 ParticlesFolder.ChildAdded:Connect(function(child)
     if IsRunning and child.Name == "Cash" then
-        print("[MEGA FARM] Обнаружена новая купюра в папке Particles:", child:GetDebugId(4))
         task.wait(0.05)
-        collect(child)
+        if child:IsA("BasePart") and child.Parent then
+            print("[MEGA FARM] Обнаружена новая валидная купюра:", child:GetDebugId(4))
+            collect(child)
+        end
     end
 end)
