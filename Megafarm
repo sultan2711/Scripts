@@ -4,7 +4,7 @@ local LP = Players.LocalPlayer
 local ParticlesFolder = workspace:WaitForChild("Particles")
 
 local IsRunning = true
-local AFK_POS = Vector3.new(-81, -31, 87)
+local AFK_POS = Vector3.new(286, -40, -16)
 local Blacklist = {}
 
 if CoreGui:FindFirstChild("MegaFarmGui") then CoreGui.MegaFarmGui:Destroy() end
