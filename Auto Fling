@@ -76,7 +76,6 @@ local function returnToSafety()
         myRoot.Velocity = Vector3.new(0, 0, 0)
         myRoot.RotVelocity = Vector3.new(0, 0, 0)
     end
-    savedCFrame = nil
 end
 
 local function toggleAntiFling(state)
@@ -122,16 +121,37 @@ StartBtn.MouseButton1Click:Connect(function()
         
         toggleAntiFling(true)
         
+        local wasWaitingForRespawn = false
+
         ConnectionLoop = RunService.Heartbeat:Connect(function()
             myChar = PLAYER.Character
             myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
             local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
             
+            -- Если наш собственный персонаж пропал или умер, аварийно выключаем
+            if not myRoot or not myHum or myHum.Health <= 0 then
+                IS_FLINGING = false
+                StartBtn.Text = "START FLING"
+                StartBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+                if ConnectionLoop then ConnectionLoop:Disconnect() end
+                toggleAntiFling(false)
+                resetCamera()
+                savedCFrame = nil
+                return
+            end
+
             local tChar = targetPlayer.Character
             local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
             local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
             
-            if myRoot and tRoot and myHum and tHum and tHum.Health > 0 then
+            -- Проверяем, жива ли цель и загружены ли ее физические части
+            if tRoot and tHum and tHum.Health > 0 then
+                -- Если цель только что зареспавнилась, обновляем точку безопасности на текущую стабильную
+                if wasWaitingForRespawn then
+                    savedCFrame = myRoot.CFrame
+                    wasWaitingForRespawn = false
+                end
+
                 if CAMERA.CameraSubject ~= tHum then
                     CAMERA.CameraSubject = tHum
                 end
@@ -150,31 +170,24 @@ StartBtn.MouseButton1Click:Connect(function()
 
                 tickCounter = tickCounter + 1
                 
-                -- Быстрый наскок туда-сюда (амплитуда 4 студа, высокая частота)
                 local forwardVector = tRoot.CFrame.LookVector
                 local ramOffset = forwardVector * (math.cos(tickCounter * 0.8) * 4)
                 
                 local finalPosition = tRoot.Position + predictionOffset + ramOffset
                 
-                -- Бешеное вращение CFrame по всем трем осям (X, Y, Z)
                 local rX = math.rad((tickCounter * 75) % 360)
                 local rY = math.rad((tickCounter * 90) % 360)
                 local rZ = math.rad((tickCounter * 65) % 360)
                 
                 myRoot.CFrame = CFrame.new(finalPosition) * CFrame.Angles(rX, rY, rZ)
                 
-                -- Импульс движения
                 local moveDir = tRoot.Velocity.Magnitude > 0.1 and tRoot.Velocity.Unit or tRoot.CFrame.LookVector
                 myRoot.Velocity = moveDir * -7000
                 
-                -- Кручение физического тела во всех плоскостях одновременно
                 myRoot.RotVelocity = Vector3.new(500, 500, 500)
             else
-                IS_FLINGING = false
-                StartBtn.Text = "START FLING"
-                StartBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
-                if ConnectionLoop then ConnectionLoop:Disconnect() end
-                toggleAntiFling(false)
+                -- Сюда скрипт попадает, если цель мертва или респавнится прямо сейчас
+                wasWaitingForRespawn = true
                 resetCamera()
                 returnToSafety()
             end
@@ -186,5 +199,6 @@ StartBtn.MouseButton1Click:Connect(function()
         toggleAntiFling(false)
         resetCamera()
         returnToSafety()
+        savedCFrame = nil
     end
 end)
