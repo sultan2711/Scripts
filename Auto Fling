@@ -160,7 +160,7 @@ StartBtn.MouseButton1Click:Connect(function()
                     myHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
-                -- Круговое упреждение цели
+                -- 1. Круговое упреждение цели
                 local currentTargetPosition = tRoot.Position
                 local currentTargetVelocity = tRoot.Velocity
                 local predictionOffset = Vector3.new(0, 0, 0)
@@ -186,11 +186,21 @@ StartBtn.MouseButton1Click:Connect(function()
                 
                 local finalPosition = currentTargetPosition + predictionOffset + ramOffset
                 
+                -- 2. Анти-прыжок: корректируем высоту перехвата
+                if tHum.FloorMaterial == Enum.Material.Air then
+                    -- Если цель прыгнула, взлетаем чуть выше центра её текущей позиции в воздухе
+                    finalPosition = Vector3.new(finalPosition.X, currentTargetPosition.Y + 1.5, finalPosition.Z)
+                else
+                    -- На земле держимся на уровне хитбокса торса
+                    finalPosition = Vector3.new(finalPosition.X, currentTargetPosition.Y + 0.5, finalPosition.Z)
+                end
+                
                 myRoot.CFrame = CFrame.new(finalPosition, currentTargetPosition)
                 
+                -- Генерируем дикую угловую скорость и инерцию
                 local moveDir = currentTargetVelocity.Magnitude > 0.1 and currentTargetVelocity.Unit or forwardVector
                 myRoot.Velocity = moveDir * -8500
-                myRoot.RotVelocity = Vector3.new(600, 600, 600)
+                myRoot.RotVelocity = Vector3.new(650, 650, 650)
             else
                 wasWaitingForRespawn = true
                 lastTargetPosition = nil
