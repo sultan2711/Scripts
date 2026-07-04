@@ -122,6 +122,8 @@ StartBtn.MouseButton1Click:Connect(function()
         toggleAntiFling(true)
         
         local wasWaitingForRespawn = false
+        local lastTargetPosition = nil
+        local lastTargetVelocity = Vector3.new(0, 0, 0)
 
         ConnectionLoop = RunService.Heartbeat:Connect(function()
             myChar = PLAYER.Character
@@ -158,29 +160,41 @@ StartBtn.MouseButton1Click:Connect(function()
                     myHum:ChangeState(Enum.HumanoidStateType.Physics)
                 end
 
-                local predictionMultiplier = 0.35
-                local predictionOffset = tRoot.Velocity * predictionMultiplier
+                -- Круговое упреждение цели
+                local currentTargetPosition = tRoot.Position
+                local currentTargetVelocity = tRoot.Velocity
+                local predictionOffset = Vector3.new(0, 0, 0)
                 
-                if predictionOffset.Magnitude > 30 then
-                    predictionOffset = predictionOffset.Unit * 30
+                if lastTargetPosition then
+                    local deltaVelocity = currentTargetVelocity - lastTargetVelocity
+                    predictionOffset = (currentTargetVelocity * 0.45) + (deltaVelocity * 0.8)
+                else
+                    predictionOffset = currentTargetVelocity * 0.35
                 end
+                
+                if predictionOffset.Magnitude > 35 then
+                    predictionOffset = predictionOffset.Unit * 35
+                end
+                
+                lastTargetPosition = currentTargetPosition
+                lastTargetVelocity = currentTargetVelocity
 
                 tickCounter = tickCounter + 1
                 
                 local forwardVector = tRoot.CFrame.LookVector
-                local ramOffset = forwardVector * (math.cos(tickCounter * 0.8) * 4)
+                local ramOffset = forwardVector * (math.cos(tickCounter * 1.2) * 5)
                 
-                local finalPosition = tRoot.Position + predictionOffset + ramOffset
+                local finalPosition = currentTargetPosition + predictionOffset + ramOffset
                 
-                -- Персонаж больше не крутится визуально, CFrame сохраняет нормальную ориентацию цели
-                myRoot.CFrame = CFrame.new(finalPosition, finalPosition + forwardVector)
+                myRoot.CFrame = CFrame.new(finalPosition, currentTargetPosition)
                 
-                -- Оставляем скрытые физические силы (бешеная инерция для флинга)
-                local moveDir = tRoot.Velocity.Magnitude > 0.1 and tRoot.Velocity.Unit or tRoot.CFrame.LookVector
-                myRoot.Velocity = moveDir * -7000
-                myRoot.RotVelocity = Vector3.new(500, 500, 500)
+                local moveDir = currentTargetVelocity.Magnitude > 0.1 and currentTargetVelocity.Unit or forwardVector
+                myRoot.Velocity = moveDir * -8500
+                myRoot.RotVelocity = Vector3.new(600, 600, 600)
             else
                 wasWaitingForRespawn = true
+                lastTargetPosition = nil
+                lastTargetVelocity = Vector3.new(0, 0, 0)
                 resetCamera()
                 returnToSafety()
             end
