@@ -1,58 +1,9 @@
-local rawUrl = "https://i.ibb.co/N6B9bXQ9/1783191883660.png"
-local localFileName = "downloaded_popup_image.png"
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local CoreGui = game:GetService("CoreGui")
 
-local PLAYER = Players.LocalPlayer
 local trackedKnives = {}
 local trackedGuns = {}
-
-local localAssetId = ""
-
-print("[ESP & POPUP] Скрипт успешно запущен. Начинаю подготовку локального файла...")
-
--- 1. ЛОГИКА СКАЧИВАНИЯ И ЗАГРУЗКИ ИЗ ЛОКАЛЬНОЙ ПАМЯТИ
-local function prepareLocalImage()
-    if not writefile or not game.HttpGet then
-        warn("[LOCAL STORAGE ERROR] Твой эксплойт не поддерживает writefile или HttpGet! Переключаюсь на стандартный веб-метод.")
-        localAssetId = rawUrl
-        return
-    end
-
-    local success, err = pcall(function()
-        print("[LOCAL STORAGE] Проверяю наличие сохраненного файла в локальной памяти...")
-        
-        print("[LOCAL STORAGE] Загружаю картинку из интернета для сохранения...")
-        local imageData = game:HttpGet(rawUrl)
-        writefile(localFileName, imageData)
-        print("[LOCAL STORAGE] Файл успешно скачан и сохранен локально как: " .. localFileName)
-        
-        if getcustomasset then
-            localAssetId = getcustomasset(localFileName)
-            print("[LOCAL STORAGE] Файл успешно инициализирован из памяти: " .. tostring(localAssetId))
-        else
-            localAssetId = "rbxasset://.." .. localFileName
-            print("[LOCAL STORAGE] Преобразовано в rbxasset.")
-        end
-    end)
-
-    if not success then
-        warn("[LOCAL STORAGE ERROR] Не удалось сохранить файл локально: " .. tostring(err) .. ". Переключаюсь на прямую ссылку.")
-        localAssetId = rawUrl
-    end
-end
-
-prepareLocalImage()
-
--- Поиск родительского контейнера для GUI
-local targetGuiParent = PLAYER:WaitForChild("PlayerGui")
-if CoreGui and not pcall(function() local test = CoreGui.Name end) then
-    targetGuiParent = CoreGui
-    print("[ESP & POPUP] Логи: Выбран контейнер CoreGui для защиты окон.")
-end
 
 local function getHighlight(target, name, color)
     local highlight = target:FindFirstChild(name)
@@ -96,92 +47,11 @@ local function scanForGun()
     end
 end
 
--- Функция для генерации всплывающих окон
-local windowCount = 0
-local function createPopUpWindow()
-    windowCount = windowCount + 1
-    local currentId = windowCount
-    print("[POPUP LOG] Создаю строго квадратное окно #" .. currentId)
-
-    local ScreenGui = targetGuiParent:FindFirstChild("PopUpImageGui")
-    if not ScreenGui then
-        ScreenGui = Instance.new("ScreenGui")
-        ScreenGui.Name = "PopUpImageGui"
-        ScreenGui.Parent = targetGuiParent
-        ScreenGui.ResetOnSpawn = false
-    end
-
-    local Window = Instance.new("Frame")
-    -- Делаем окно строго квадратным (225 на 225 пикселей)
-    Window.Size = UDim2.new(0, 225, 0, 225) 
-    Window.Position = UDim2.new(math.random(10, 75) / 100, 0, math.random(10, 75) / 100, 0)
-    Window.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    Window.BorderSizePixel = 2
-    Window.BorderColor3 = Color3.fromRGB(255, 255, 255)
-    Window.Active = true
-    Window.Draggable = true 
-    Window.Parent = ScreenGui
-
-    -- Шапка окна
-    local TopBar = Instance.new("Frame")
-    TopBar.Size = UDim2.new(1, 0, 0, 25)
-    TopBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    TopBar.BorderSizePixel = 0
-    TopBar.Parent = Window
-
-    -- Кнопка закрытия (Крестик)
-    local CloseBtn = Instance.new("TextButton")
-    CloseBtn.Size = UDim2.new(0, 25, 1, 0)
-    CloseBtn.Position = UDim2.new(1, -25, 0, 0)
-    CloseBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-    CloseBtn.Text = "X"
-    CloseBtn.TextColor3 = Color3.new(1, 1, 1)
-    CloseBtn.Font = Enum.Font.SourceSansBold
-    CloseBtn.TextSize = 14
-    CloseBtn.BorderSizePixel = 0
-    CloseBtn.Parent = TopBar
-
-    CloseBtn.MouseButton1Click:Connect(function()
-        print("[POPUP LOG] Окно #" .. currentId .. " закрыто.")
-        Window:Destroy()
-    end)
-
-    -- Контейнер для картинки
-    local ImageLabel = Instance.new("ImageLabel")
-    -- Подгоняем размеры контейнера под чистый квадрат внутри окна (учитывая высоту шапки 25px)
-    ImageLabel.Size = UDim2.new(0, 195, 0, 195)
-    ImageLabel.Position = UDim2.new(0, 15, 0, 30)
-    ImageLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    ImageLabel.BorderSizePixel = 0
-    
-    ImageLabel.Image = localAssetId
-    -- Настройка Stretch принудительно растягивает картинку в идеальный квадрат по размерам ImageLabel
-    ImageLabel.ScaleType = Enum.ScaleType.Stretch
-    
-    ImageLabel.Parent = Window
-end
-
--- Фоновый поток ожидания минуты перед спавном окон
-task.spawn(function()
-    print("[ESP & POPUP] Логи: Ожидание 60 секунд перед началом спавна...")
-    task.wait(60) 
-    print("[ESP & POPUP] Логи: Минута прошла! Спавн окон из локальной памяти активирован.")
-    
-    while true do
-        local success, err = pcall(createPopUpWindow)
-        if not success then
-            warn("[POPUP ERROR] Ошибка: ", err)
-        end
-        task.wait(5) 
-    end
-end)
-
--- Основной цикл подсветки игроков
 RunService.Heartbeat:Connect(function()
     scanForGun()
 
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= PLAYER and player.Character then
+        if player ~= Players.LocalPlayer and player.Character then
             local hasKnife = false
             local hasGun = false
             local knifeLoc = ""
