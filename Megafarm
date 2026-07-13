@@ -3,7 +3,9 @@ local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
 local VIM = game:GetService("VirtualInputManager")
 local LP = Players.LocalPlayer
-local ParticlesFolder = workspace:WaitForChild("Particles")
+
+-- Безопасное получение папки Particles в workspace
+local ParticlesFolder = workspace:WaitForChild("Particles", 10)
 
 local IsRunning = true
 local AFK_POS = Vector3.new(287, -40, -16)
@@ -36,7 +38,7 @@ CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 CloseBtn.Font = Enum.Font.SourceSansBold
 
-print("[MEGA FARM] Скрипт успешно запущен. AFK Позиция:", tostring(AFK_POS))
+print("[MEGA FARM] Скрипт запущен. Проверка монет по наличию TouchInterest.")
 
 local function getRoot()
     return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
@@ -48,32 +50,27 @@ end
 
 local function stopFarming()
     IsRunning = false
-    print("[MEGA FARM] Фарм остановлен пользователем.")
+    print("[MEGA FARM] Фарм остановлен.")
     ScreenGui:Destroy()
 end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
 
--- Функция проверки купюры на реальность
+-- Упрощенная и точная проверка на реальность (только наличие TouchInterest)
 local function isRealCash(part)
     if not part or not part:IsA("BasePart") or not part.Parent then
         return false
     end
-    
-    -- 1. У реальной купюры должен быть TouchInterest для регистрации касания
-    local hasTouch = part:FindFirstChildOfClass("TouchInterest")
-    
-    -- 2. Купюра не должна быть прозрачной (невидимки/уже собранные)
-    local isVisible = part.Transparency < 1
-    
-    return hasTouch and isVisible
+    -- Если внутри парта есть TouchInterest (TouchTransmitter), значит монета реальная
+    return part:FindFirstChildOfClass("TouchInterest") ~= nil
 end
 
 local function getValidCash()
     local validItems = {}
+    if not ParticlesFolder then return validItems end
+    
     for _, v in pairs(ParticlesFolder:GetChildren()) do
         if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
-            -- Проверяем купюру на реальность перед тем, как добавить в список сбора
             if isRealCash(v) then
                 table.insert(validItems, v) 
             end
@@ -88,7 +85,6 @@ local function onCharacterAdded(char)
     if root then
         local cashItems = getValidCash()
         if #cashItems == 0 then
-            print("[MEGA FARM] Реальных монет нет. Мгновенный перенос нового персонажа на AFK позицию.")
             root.Velocity = Vector3.new(0, 0, 0)
             root.CFrame = CFrame.new(AFK_POS)
         end
@@ -98,6 +94,7 @@ end
 if LP.Character then task.spawn(onCharacterAdded, LP.Character) end
 LP.CharacterAdded:Connect(onCharacterAdded)
 
+-- Прыжки для предотвращения кика за AFK
 task.spawn(function()
     while IsRunning do
         local hum = getHumanoid()
@@ -124,7 +121,7 @@ local function collect(item)
     
     if not root or not item.Parent then return end
 
-    print("[MEGA FARM] Начало сбора реальной купюры:", item:GetDebugId(4))
+    print("[MEGA FARM] Собираю реальную купюру:", item:GetDebugId(4))
     local counter = 0
     local startTime = tick()
 
@@ -132,17 +129,16 @@ local function collect(item)
         if not IsRunning then break end
         
         if hum and hum.Health <= 0 then
-            warn("[MEGA FARM] Персонаж погиб во время сбора! Монета добавлена в PERMANENT BLACKLIST:", item:GetDebugId(4))
+            warn("[MEGA FARM] Смерть при сборе! Вносим в черный список:", item:GetDebugId(4))
             PermanentBlacklist[item] = true 
             break
         end
 
         if tick() - startTime > 3 then
-            warn("[MEGA FARM] Превышен таймаут сбора (3 сек). Монета добавлена во временный блеклист на 10 сек:", item:GetDebugId(4))
+            warn("[MEGA FARM] Затуп при сборе (3 сек). Пропускаем на время:", item:GetDebugId(4))
             Blacklist[item] = true
             task.delay(10, function()
                 Blacklist[item] = nil
-                print("[MEGA FARM] Временный блеклист снят для монеты:", item:GetDebugId(4))
             end)
             break
         end
@@ -156,11 +152,12 @@ local function collect(item)
             local rotY = counter * 150
             local rotZ = math.sin(counter) * 180
             
+            -- Физический телепорт на купюру
             root.CFrame = item.CFrame * CFrame.new(offset, 0, 0) * CFrame.Angles(math.rad(rotX), math.rad(rotY), math.rad(rotZ))
             counter = counter + 0.3
         end
         task.wait()
-    -- Добавлена проверка на реальность в условие цикла: если в процессе сбора TouchInterest исчез, прекращаем телепорт
+    -- Цикл прерывается сразу, как только TouchInterest пропадает (монета собрана)
     until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item] or not isRealCash(item)
 end
 
@@ -176,7 +173,7 @@ task.spawn(function()
 
             if #cashItems > 0 then
                 if #cashItems ~= lastCount then
-                    print("[MEGA FARM] Найдено реальных купюр на карте:", #cashItems)
+                    print("[MEGA FARM] Доступно реальных купюр с TouchInterest:", #cashItems)
                     lastCount = #cashItems
                 end
                 
@@ -192,7 +189,7 @@ task.spawn(function()
     end
 end)
 
--- Жесткий покадровый телепорт в AFK позицию, если нет активных купюр
+-- Удержание AFK позиции
 local isAlreadyAFK = false
 RunService.Heartbeat:Connect(function()
     if not IsRunning then return end
@@ -205,7 +202,7 @@ RunService.Heartbeat:Connect(function()
 
         if #cashItems == 0 then
             if not isAlreadyAFK then
-                print("[MEGA FARM] На карте нет реальных монет. Удержание AFK позиции.")
+                print("[MEGA FARM] Реальных монет нет. Стоим в AFK.")
                 isAlreadyAFK = true
             end
             root.Velocity = Vector3.new(0, 0, 0)
@@ -217,13 +214,15 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-ParticlesFolder.ChildAdded:Connect(function(child)
-    if IsRunning and child.Name == "Cash" then
-        task.wait(0.05)
-        -- Проверяем на реальность свежеспавненный парт
-        if isRealCash(child) then
-            print("[MEGA FARM] Обнаружена новая реальная купюра:", child:GetDebugId(4))
-            collect(child)
+-- Слежка за новыми купюрами
+if ParticlesFolder then
+    ParticlesFolder.ChildAdded:Connect(function(child)
+        if IsRunning and child.Name == "Cash" then
+            task.wait(0.05)
+            if isRealCash(child) then
+                print("[MEGA FARM] Появилась новая реальная купюра:", child:GetDebugId(4))
+                collect(child)
+            end
         end
-    end
-end)
+    end)
+end
