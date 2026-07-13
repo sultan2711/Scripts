@@ -15,23 +15,34 @@ if CoreGui:FindFirstChild("MegaFarmGui") then CoreGui.MegaFarmGui:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "MegaFarmGui"
 
+-- Увеличили ширину фрейма, чтобы влезла еще одна кнопка
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 130, 0, 40)
-Frame.Position = UDim2.new(0.5, -65, 0, 20)
+Frame.Size = UDim2.new(0, 160, 0, 40)
+Frame.Position = UDim2.new(0.5, -80, 0, 20)
 Frame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 Frame.BorderSizePixel = 0
 
 local Title = Instance.new("TextLabel", Frame)
-Title.Size = UDim2.new(0.75, 0, 1, 0)
+Title.Size = UDim2.new(0.6, 0, 1, 0)
 Title.Text = "MEGA FARM"
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.BackgroundTransparency = 1
 Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 14
 
+-- Кнопка очистки блеклистов (C)
+local ClearBtn = Instance.new("TextButton", Frame)
+ClearBtn.Size = UDim2.new(0.2, 0, 1, 0)
+ClearBtn.Position = UDim2.new(0.6, 0, 0, 0)
+ClearBtn.BackgroundColor3 = Color3.fromRGB(200, 120, 0)
+ClearBtn.Text = "C"
+ClearBtn.TextColor3 = Color3.new(1, 1, 1)
+ClearBtn.Font = Enum.Font.SourceSansBold
+
+-- Кнопка закрытия (X)
 local CloseBtn = Instance.new("TextButton", Frame)
-CloseBtn.Size = UDim2.new(0.25, 0, 1, 0)
-CloseBtn.Position = UDim2.new(0.75, 0, 0, 0)
+CloseBtn.Size = UDim2.new(0.2, 0, 1, 0)
+CloseBtn.Position = UDim2.new(0.8, 0, 0, 0)
 CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -50,7 +61,14 @@ local function stopFarming()
     ScreenGui:Destroy()
 end
 
+-- Логика очистки блеклистов
+local function clearBlacklists()
+    table.clear(Blacklist)
+    table.clear(PermanentBlacklist)
+end
+
 CloseBtn.MouseButton1Click:Connect(stopFarming)
+ClearBtn.MouseButton1Click:Connect(clearBlacklists)
 
 local function isValidCashPart(part)
     if not part or not part:IsA("BasePart") or part.Name ~= "Cash" or not part.Parent then
