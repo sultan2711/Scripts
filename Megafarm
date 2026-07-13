@@ -4,52 +4,13 @@ local RunService = game:GetService("RunService")
 local VIM = game:GetService("VirtualInputManager")
 local LP = Players.LocalPlayer
 
+-- Безопасно находим папку Particles
 local ParticlesFolder = workspace:WaitForChild("Particles", 10)
 
 local IsRunning = true
 local AFK_POS = Vector3.new(287, -40, -16)
 local Blacklist = {}
 local PermanentBlacklist = {} 
-
--- Имя по умолчанию (на случай, если папка вообще пуста)
-local targetName = "Cash"
-
--- СТАБИЛЬНЫЙ ПОИСК ИМЕНИ ОБРАЗЦА
-if ParticlesFolder then
-    local function findSampleName()
-        for _, child in pairs(ParticlesFolder:GetChildren()) do
-            -- Ищем любой BasePart, имя которого содержит "Cash" (или просто любой парт, если имя другое)
-            if child:IsA("BasePart") and (string.find(child.Name, "Cash") or child:FindFirstChildOfClass("TouchInterest")) then
-                return child.Name
-            end
-        end
-        return nil
-    end
-
-    local sample = findSampleName()
-    if sample then
-        targetName = sample
-        print("[MEGA FARM] Имя купюр автоматически определено по первому образцу:", targetName)
-    else
-        -- Если при старте папка пуста, ждем появления первого подходящего объекта
-        task.spawn(function()
-            print("[MEGA FARM] Папка пуста. Ожидаю появление первого образца для клонирования имени...")
-            local connection
-            connection = ParticlesFolder.ChildAdded:Connect(function(child)
-                if child:IsA("BasePart") and child:FindFirstChildOfClass("TouchInterest") then
-                    targetName = child.Name
-                    print("[MEGA FARM] Имя успешно перехвачено при спавне:", targetName)
-                    connection:Disconnect() -- Отключаем слежку, имя уже получено
-                end
-            end)
-            
-            -- Таймаут на случай, если вообще ничего не спавнится (чтобы не висел бесконечно)
-            task.delay(15, function()
-                if connection then connection:Disconnect() end
-            end)
-        end)
-    end
-end
 
 if CoreGui:FindFirstChild("MegaFarmGui") then CoreGui.MegaFarmGui:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
@@ -77,7 +38,7 @@ CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 CloseBtn.Font = Enum.Font.SourceSansBold
 
-print("[MEGA FARM] Стабильный скрипт запущен. Целевое имя:", targetName)
+print("[MEGA FARM] Скрипт запущен. Сбор строго по имени 'Cash' без проверок подлинности.")
 
 local function getRoot()
     return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
@@ -95,23 +56,14 @@ end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
 
--- Проверка на реальность (имя совпадает с динамическим образцом + есть TouchInterest)
-local function isRealCash(part)
-    if not part or not part:IsA("BasePart") or not part.Parent then
-        return false
-    end
-    return part.Name == targetName and part:FindFirstChildOfClass("TouchInterest") ~= nil
-end
-
+-- Функция собирает только BasePart с именем "Cash"
 local function getValidCash()
     local validItems = {}
     if not ParticlesFolder then return validItems end
     
     for _, v in pairs(ParticlesFolder:GetChildren()) do
-        if not Blacklist[v] and not PermanentBlacklist[v] then 
-            if isRealCash(v) then
-                table.insert(validItems, v) 
-            end
+        if v:IsA("BasePart") and v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
+            table.insert(validItems, v) 
         end
     end
     return validItems
@@ -146,7 +98,8 @@ task.spawn(function()
 end)
 
 local function collect(item)
-    if not IsRunning or Blacklist[item] or PermanentBlacklist[item] or not isRealCash(item) then return end
+    if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then return end
+    if not item:IsA("BasePart") or item.Name ~= "Cash" or not item.Parent then return end
 
     local root = getRoot()
     local hum = getHumanoid()
@@ -159,7 +112,7 @@ local function collect(item)
     
     if not root or not item.Parent then return end
 
-    print("[MEGA FARM] Сбор цели:", item:GetDebugId(4))
+    print("[MEGA FARM] Телепорт на парт:", item:GetDebugId(4))
     local counter = 0
     local startTime = tick()
 
@@ -167,13 +120,13 @@ local function collect(item)
         if not IsRunning then break end
         
         if hum and hum.Health <= 0 then
-            warn("[MEGA FARM] Персонаж погиб. Монета в блеклисте:", item:GetDebugId(4))
+            warn("[MEGA FARM] Смерть при сборе. Блеклист:", item:GetDebugId(4))
             PermanentBlacklist[item] = true 
             break
         end
 
         if tick() - startTime > 3 then
-            warn("[MEGA FARM] Зависание сбора. Пропуск на 10 сек:", item:GetDebugId(4))
+            warn("[MEGA FARM] Зависание сбора (3 сек). Пропуск:", item:GetDebugId(4))
             Blacklist[item] = true
             task.delay(10, function()
                 Blacklist[item] = nil
@@ -184,7 +137,7 @@ local function collect(item)
         root = getRoot()
         hum = getHumanoid()
 
-        if root and hum and item.Parent and isRealCash(item) then
+        if root and hum and item.Parent and item.Name == "Cash" then
             local offset = math.sin(counter) * 5
             local rotX = math.cos(counter) * 180
             local rotY = counter * 150
@@ -194,7 +147,8 @@ local function collect(item)
             counter = counter + 0.3
         end
         task.wait()
-    until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item] or not isRealCash(item)
+    -- Цикл крутится пока парт физически существует в игре и имеет имя Cash
+    until not item or not item.Parent or item.Name ~= "Cash" or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
 end
 
 -- Основной цикл сканирования
@@ -209,7 +163,7 @@ task.spawn(function()
 
             if #cashItems > 0 then
                 if #cashItems ~= lastCount then
-                    print("[MEGA FARM] Найдено реальных целей на сбор:", #cashItems)
+                    print("[MEGA FARM] Найдено партов Cash на карте:", #cashItems)
                     lastCount = #cashItems
                 end
                 
@@ -238,7 +192,7 @@ RunService.Heartbeat:Connect(function()
 
         if #cashItems == 0 then
             if not isAlreadyAFK then
-                print("[MEGA FARM] Целей нет. Ожидание на AFK позиции.")
+                print("[MEGA FARM] Партов Cash нет. Ожидание на AFK позиции.")
                 isAlreadyAFK = true
             end
             root.Velocity = Vector3.new(0, 0, 0)
@@ -250,13 +204,13 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Отслеживание спавна новых
+-- Моментальный перехват новых купюр при спавне
 if ParticlesFolder then
     ParticlesFolder.ChildAdded:Connect(function(child)
         if IsRunning then
             task.wait(0.05)
-            if isRealCash(child) then
-                print("[MEGA FARM] Спавн новой цели:", child:GetDebugId(4))
+            if child:IsA("BasePart") and child.Name == "Cash" and child.Parent then
+                print("[MEGA FARM] Спавн нового парта Cash:", child:GetDebugId(4))
                 collect(child)
             end
         end
