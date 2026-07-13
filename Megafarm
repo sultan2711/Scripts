@@ -4,7 +4,6 @@ local RunService = game:GetService("RunService")
 local VIM = game:GetService("VirtualInputManager")
 local LP = Players.LocalPlayer
 
--- Безопасно находим папку Particles
 local ParticlesFolder = workspace:WaitForChild("Particles", 10)
 
 local IsRunning = true
@@ -38,8 +37,6 @@ CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 CloseBtn.Font = Enum.Font.SourceSansBold
 
-print("[MEGA FARM] Скрипт запущен. Проверка TouchTransmitter активна.")
-
 local function getRoot()
     return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
 end
@@ -50,20 +47,16 @@ end
 
 local function stopFarming()
     IsRunning = false
-    print("[MEGA FARM] Фарм остановлен.")
     ScreenGui:Destroy()
 end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
 
--- Новая точная проверка по твоим скриншотам
 local function isValidCashPart(part)
     if not part or not part:IsA("BasePart") or part.Name ~= "Cash" or not part.Parent then
         return false
     end
     
-    -- Ищем внутри парта объект, у которого класс равен "TouchTransmitter" 
-    -- или имя которого "TouchInterest"
     for _, child in pairs(part:GetChildren()) do
         if child.ClassName == "TouchTransmitter" or child.Name == "TouchInterest" then
             return true
@@ -73,7 +66,6 @@ local function isValidCashPart(part)
     return false
 end
 
--- Функция собирает только BasePart с именем "Cash" и TouchTransmitter внутри
 local function getValidCash()
     local validItems = {}
     if not ParticlesFolder then return validItems end
@@ -103,7 +95,6 @@ end
 if LP.Character then task.spawn(onCharacterAdded, LP.Character) end
 LP.CharacterAdded:Connect(onCharacterAdded)
 
--- Защита от AFK-кика
 task.spawn(function()
     while IsRunning do
         local hum = getHumanoid()
@@ -131,7 +122,6 @@ local function collect(item)
     
     if not root or not item.Parent then return end
 
-    print("[MEGA FARM] Телепорт на парт:", item:GetDebugId(4))
     local counter = 0
     local startTime = tick()
 
@@ -139,13 +129,11 @@ local function collect(item)
         if not IsRunning then break end
         
         if hum and hum.Health <= 0 then
-            warn("[MEGA FARM] Смерть при сборе. Блеклист:", item:GetDebugId(4))
             PermanentBlacklist[item] = true 
             break
         end
 
         if tick() - startTime > 3 then
-            warn("[MEGA FARM] Зависание сбора (3 сек). Пропуск:", item:GetDebugId(4))
             Blacklist[item] = true
             task.delay(10, function()
                 Blacklist[item] = nil
@@ -166,13 +154,10 @@ local function collect(item)
             counter = counter + 0.3
         end
         task.wait()
-    -- Цикл завершается мгновенно, как только TouchTransmitter исчезает из парта
     until not item or not item.Parent or not isValidCashPart(item) or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
 end
 
--- Основной цикл сканирования
 task.spawn(function()
-    local lastCount = -1
     while IsRunning do
         local root = getRoot()
         local hum = getHumanoid()
@@ -181,25 +166,16 @@ task.spawn(function()
             local cashItems = getValidCash()
 
             if #cashItems > 0 then
-                if #cashItems ~= lastCount then
-                    print("[MEGA FARM] Найдено реальных Cash с TouchTransmitter:", #cashItems)
-                    lastCount = #cashItems
-                end
-                
                 for _, item in pairs(cashItems) do
                     if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then break end
                     collect(item)
                 end
-            else
-                lastCount = 0
             end
         end
         task.wait(0.2)
     end
 end)
 
--- Удержание AFK
-local isAlreadyAFK = false
 RunService.Heartbeat:Connect(function()
     if not IsRunning then return end
     
@@ -210,26 +186,18 @@ RunService.Heartbeat:Connect(function()
         local cashItems = getValidCash()
 
         if #cashItems == 0 then
-            if not isAlreadyAFK then
-                print("[MEGA FARM] Партов Cash с TouchTransmitter нет. Ожидание на AFK позиции.")
-                isAlreadyAFK = true
-            end
             root.Velocity = Vector3.new(0, 0, 0)
             root.RotVelocity = Vector3.new(0, 0, 0)
             root.CFrame = CFrame.new(AFK_POS)
-        else
-            isAlreadyAFK = false
         end
     end
 end)
 
--- Моментальный перехват новых купюр при спавне
 if ParticlesFolder then
     ParticlesFolder.ChildAdded:Connect(function(child)
         if IsRunning then
             task.wait(0.05)
             if isValidCashPart(child) then
-                print("[MEGA FARM] Спавн нового Cash с TouchTransmitter:", child:GetDebugId(4))
                 collect(child)
             end
         end
