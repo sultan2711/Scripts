@@ -38,7 +38,7 @@ CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 CloseBtn.Font = Enum.Font.SourceSansBold
 
-print("[MEGA FARM] Скрипт запущен. Сбор строго по имени 'Cash' без проверок подлинности.")
+print("[MEGA FARM] Скрипт запущен. Проверка TouchTransmitter активна.")
 
 local function getRoot()
     return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
@@ -56,14 +56,33 @@ end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
 
--- Функция собирает только BasePart с именем "Cash"
+-- Новая точная проверка по твоим скриншотам
+local function isValidCashPart(part)
+    if not part or not part:IsA("BasePart") or part.Name ~= "Cash" or not part.Parent then
+        return false
+    end
+    
+    -- Ищем внутри парта объект, у которого класс равен "TouchTransmitter" 
+    -- или имя которого "TouchInterest"
+    for _, child in pairs(part:GetChildren()) do
+        if child.ClassName == "TouchTransmitter" or child.Name == "TouchInterest" then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- Функция собирает только BasePart с именем "Cash" и TouchTransmitter внутри
 local function getValidCash()
     local validItems = {}
     if not ParticlesFolder then return validItems end
     
     for _, v in pairs(ParticlesFolder:GetChildren()) do
-        if v:IsA("BasePart") and v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
-            table.insert(validItems, v) 
+        if not Blacklist[v] and not PermanentBlacklist[v] then 
+            if isValidCashPart(v) then
+                table.insert(validItems, v) 
+            end
         end
     end
     return validItems
@@ -99,7 +118,7 @@ end)
 
 local function collect(item)
     if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then return end
-    if not item:IsA("BasePart") or item.Name ~= "Cash" or not item.Parent then return end
+    if not isValidCashPart(item) then return end
 
     local root = getRoot()
     local hum = getHumanoid()
@@ -137,7 +156,7 @@ local function collect(item)
         root = getRoot()
         hum = getHumanoid()
 
-        if root and hum and item.Parent and item.Name == "Cash" then
+        if root and hum and item.Parent and isValidCashPart(item) then
             local offset = math.sin(counter) * 5
             local rotX = math.cos(counter) * 180
             local rotY = counter * 150
@@ -147,8 +166,8 @@ local function collect(item)
             counter = counter + 0.3
         end
         task.wait()
-    -- Цикл крутится пока парт физически существует в игре и имеет имя Cash
-    until not item or not item.Parent or item.Name ~= "Cash" or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
+    -- Цикл завершается мгновенно, как только TouchTransmitter исчезает из парта
+    until not item or not item.Parent or not isValidCashPart(item) or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
 end
 
 -- Основной цикл сканирования
@@ -163,7 +182,7 @@ task.spawn(function()
 
             if #cashItems > 0 then
                 if #cashItems ~= lastCount then
-                    print("[MEGA FARM] Найдено партов Cash на карте:", #cashItems)
+                    print("[MEGA FARM] Найдено реальных Cash с TouchTransmitter:", #cashItems)
                     lastCount = #cashItems
                 end
                 
@@ -192,7 +211,7 @@ RunService.Heartbeat:Connect(function()
 
         if #cashItems == 0 then
             if not isAlreadyAFK then
-                print("[MEGA FARM] Партов Cash нет. Ожидание на AFK позиции.")
+                print("[MEGA FARM] Партов Cash с TouchTransmitter нет. Ожидание на AFK позиции.")
                 isAlreadyAFK = true
             end
             root.Velocity = Vector3.new(0, 0, 0)
@@ -209,8 +228,8 @@ if ParticlesFolder then
     ParticlesFolder.ChildAdded:Connect(function(child)
         if IsRunning then
             task.wait(0.05)
-            if child:IsA("BasePart") and child.Name == "Cash" and child.Parent then
-                print("[MEGA FARM] Спавн нового парта Cash:", child:GetDebugId(4))
+            if isValidCashPart(child) then
+                print("[MEGA FARM] Спавн нового Cash с TouchTransmitter:", child:GetDebugId(4))
                 collect(child)
             end
         end
