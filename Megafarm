@@ -54,11 +54,29 @@ end
 
 CloseBtn.MouseButton1Click:Connect(stopFarming)
 
+-- Функция проверки купюры на реальность
+local function isRealCash(part)
+    if not part or not part:IsA("BasePart") or not part.Parent then
+        return false
+    end
+    
+    -- 1. У реальной купюры должен быть TouchInterest для регистрации касания
+    local hasTouch = part:FindFirstChildOfClass("TouchInterest")
+    
+    -- 2. Купюра не должна быть прозрачной (невидимки/уже собранные)
+    local isVisible = part.Transparency < 1
+    
+    return hasTouch and isVisible
+end
+
 local function getValidCash()
     local validItems = {}
     for _, v in pairs(ParticlesFolder:GetChildren()) do
-        if v.Name == "Cash" and v:IsA("BasePart") and v.Parent and not Blacklist[v] and not PermanentBlacklist[v] then 
-            table.insert(validItems, v) 
+        if v.Name == "Cash" and not Blacklist[v] and not PermanentBlacklist[v] then 
+            -- Проверяем купюру на реальность перед тем, как добавить в список сбора
+            if isRealCash(v) then
+                table.insert(validItems, v) 
+            end
         end
     end
     return validItems
@@ -70,7 +88,7 @@ local function onCharacterAdded(char)
     if root then
         local cashItems = getValidCash()
         if #cashItems == 0 then
-            print("[MEGA FARM] Монет нет. Мгновенный перенос нового персонажа на AFK позицию.")
+            print("[MEGA FARM] Реальных монет нет. Мгновенный перенос нового персонажа на AFK позицию.")
             root.Velocity = Vector3.new(0, 0, 0)
             root.CFrame = CFrame.new(AFK_POS)
         end
@@ -93,7 +111,7 @@ task.spawn(function()
 end)
 
 local function collect(item)
-    if not IsRunning or Blacklist[item] or PermanentBlacklist[item] then return end
+    if not IsRunning or Blacklist[item] or PermanentBlacklist[item] or not isRealCash(item) then return end
 
     local root = getRoot()
     local hum = getHumanoid()
@@ -104,9 +122,9 @@ local function collect(item)
         hum = getHumanoid()
     end
     
-    if not root or not item:IsA("BasePart") or not item.Parent then return end
+    if not root or not item.Parent then return end
 
-    print("[MEGA FARM] Начало сбора купюры:", item:GetDebugId(4))
+    print("[MEGA FARM] Начало сбора реальной купюры:", item:GetDebugId(4))
     local counter = 0
     local startTime = tick()
 
@@ -132,14 +150,7 @@ local function collect(item)
         root = getRoot()
         hum = getHumanoid()
 
-        if root and hum and item.Parent then
-            -- Безумный спам тач-интереста без искусственных задержек
-            if typeof(firetouchinterest) == "function" then
-                firetouchinterest(root, item, 0)
-                firetouchinterest(root, item, 1)
-                firetouchinterest(root, item, 0)
-            end
-
+        if root and hum and item.Parent and isRealCash(item) then
             local offset = math.sin(counter) * 5
             local rotX = math.cos(counter) * 180
             local rotY = counter * 150
@@ -149,7 +160,8 @@ local function collect(item)
             counter = counter + 0.3
         end
         task.wait()
-    until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item]
+    -- Добавлена проверка на реальность в условие цикла: если в процессе сбора TouchInterest исчез, прекращаем телепорт
+    until not item or not item.Parent or not item:IsDescendantOf(workspace) or not IsRunning or Blacklist[item] or PermanentBlacklist[item] or not isRealCash(item)
 end
 
 -- Основной цикл сбора
@@ -208,8 +220,9 @@ end)
 ParticlesFolder.ChildAdded:Connect(function(child)
     if IsRunning and child.Name == "Cash" then
         task.wait(0.05)
-        if child:IsA("BasePart") and child.Parent then
-            print("[MEGA FARM] Обнаружена новая валидная купюра:", child:GetDebugId(4))
+        -- Проверяем на реальность свежеспавненный парт
+        if isRealCash(child) then
+            print("[MEGA FARM] Обнаружена новая реальная купюра:", child:GetDebugId(4))
             collect(child)
         end
     end
