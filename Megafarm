@@ -15,7 +15,6 @@ if CoreGui:FindFirstChild("MegaFarmGui") then CoreGui.MegaFarmGui:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "MegaFarmGui"
 
--- Увеличили ширину фрейма, чтобы влезла еще одна кнопка
 local Frame = Instance.new("Frame", ScreenGui)
 Frame.Size = UDim2.new(0, 160, 0, 40)
 Frame.Position = UDim2.new(0.5, -80, 0, 20)
@@ -30,7 +29,6 @@ Title.BackgroundTransparency = 1
 Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 14
 
--- Кнопка очистки блеклистов (C)
 local ClearBtn = Instance.new("TextButton", Frame)
 ClearBtn.Size = UDim2.new(0.2, 0, 1, 0)
 ClearBtn.Position = UDim2.new(0.6, 0, 0, 0)
@@ -39,7 +37,6 @@ ClearBtn.Text = "C"
 ClearBtn.TextColor3 = Color3.new(1, 1, 1)
 ClearBtn.Font = Enum.Font.SourceSansBold
 
--- Кнопка закрытия (X)
 local CloseBtn = Instance.new("TextButton", Frame)
 CloseBtn.Size = UDim2.new(0.2, 0, 1, 0)
 CloseBtn.Position = UDim2.new(0.8, 0, 0, 0)
@@ -61,7 +58,6 @@ local function stopFarming()
     ScreenGui:Destroy()
 end
 
--- Логика очистки блеклистов
 local function clearBlacklists()
     table.clear(Blacklist)
     table.clear(PermanentBlacklist)
@@ -147,15 +143,19 @@ local function collect(item)
         if not IsRunning then break end
         
         if hum and hum.Health <= 0 then
-            PermanentBlacklist[item] = true 
+            if item.Position.Y >= -19.5 then
+                PermanentBlacklist[item] = true 
+            end
             break
         end
 
         if tick() - startTime > 3 then
-            Blacklist[item] = true
-            task.delay(10, function()
-                Blacklist[item] = nil
-            end)
+            if item.Position.Y >= -19.5 then
+                Blacklist[item] = true
+                task.delay(10, function()
+                    Blacklist[item] = nil
+                end)
+            end
             break
         end
 
