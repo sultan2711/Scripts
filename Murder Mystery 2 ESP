@@ -1,8 +1,15 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local function getHighlight(target, name, color)
+local LocalPlayer = Players.LocalPlayer
+local HIGHLIGHT_NAME = "RoleHighlight"
+
+local COLOR_MURDERER = Color3.fromRGB(255, 0, 0)
+local COLOR_SHERIFF  = Color3.fromRGB(0, 0, 255)
+local COLOR_INNOCENT = Color3.fromRGB(0, 255, 0)
+local COLOR_GUNDROP  = Color3.fromRGB(255, 255, 0)
+
+local function getOrCreateHighlight(target, name)
     local highlight = target:FindFirstChild(name)
     if not highlight then
         highlight = Instance.new("Highlight")
@@ -13,63 +20,86 @@ local function getHighlight(target, name, color)
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Parent = target
     end
-    highlight.FillColor = color
-    highlight.Enabled = true
     return highlight
 end
 
-local function disableHighlight(target, name)
-    local highlight = target:FindFirstChild(name)
-    if highlight then
-        highlight.Enabled = false
+local function updatePlayerHighlight(player)
+    if player == LocalPlayer then return end
+    
+    local char = player.Character
+    if not char then return end
+
+    local backpack = player:FindFirstChild("Backpack")
+
+    local hasKnife = (backpack and backpack:FindFirstChild("Knife")) or char:FindFirstChild("Knife")
+    local hasGun = (backpack and backpack:FindFirstChild("Gun")) or char:FindFirstChild("Gun")
+
+    local highlight = getOrCreateHighlight(char, HIGHLIGHT_NAME)
+
+    if hasKnife then
+        highlight.FillColor = COLOR_MURDERER
+        highlight.Enabled = true
+    elseif hasGun then
+        highlight.FillColor = COLOR_SHERIFF
+        highlight.Enabled = true
+    else
+        highlight.FillColor = COLOR_INNOCENT
+        highlight.Enabled = true
     end
 end
 
-local function scanForGun()
-    for _, child in ipairs(Workspace:GetChildren()) do
-        if child:IsA("Model") then
-            local gun = child:FindFirstChild("GunDrop")
-            if gun and gun:IsA("BasePart") then
-                getHighlight(gun, "GunDropHighlight", Color3.new(1, 1, 0))
-            end
-        end
+local function setupPlayerListeners(player)
+    if player == LocalPlayer then return end
+
+    local function onCharacterAdded(char)
+        updatePlayerHighlight(player)
+
+        char.ChildAdded:Connect(function() updatePlayerHighlight(player) end)
+        char.ChildRemoved:Connect(function() updatePlayerHighlight(player) end)
     end
 
-    local directGun = Workspace:FindFirstChild("GunDrop")
-    if directGun and directGun:IsA("BasePart") then
-        getHighlight(directGun, "GunDropHighlight", Color3.new(1, 1, 0))
+    if player.Character then
+        onCharacterAdded(player.Character)
+    end
+    player.CharacterAdded:Connect(onCharacterAdded)
+
+    player.ChildAdded:Connect(function(child)
+        if child.Name == "Backpack" then
+            child.ChildAdded:Connect(function() updatePlayerHighlight(player) end)
+            child.ChildRemoved:Connect(function() updatePlayerHighlight(player) end)
+            updatePlayerHighlight(player)
+        end
+    end)
+
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        backpack.ChildAdded:Connect(function() updatePlayerHighlight(player) end)
+        backpack.ChildRemoved:Connect(function() updatePlayerHighlight(player) end)
     end
 end
 
-task.spawn(function()
-    while true do
-        scanForGun()
-        task.wait(1)
-    end
-end)
+for _, player in ipairs(Players:GetPlayers()) do
+    setupPlayerListeners(player)
+end
+Players.PlayerAdded:Connect(setupPlayerListeners)
 
-RunService.Heartbeat:Connect(function()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= Players.LocalPlayer and player.Character then
-            local char = player.Character
-            local backpack = player:FindFirstChild("Backpack")
-
-            local hasKnife = (backpack and backpack:FindFirstChild("Knife")) or char:FindFirstChild("Knife")
-            local hasGun = (backpack and backpack:FindFirstChild("Gun")) or char:FindFirstChild("Gun")
-
-            if hasKnife then
-                disableHighlight(char, "GunHighlight")
-                disableHighlight(char, "DefaultHighlight")
-                getHighlight(char, "KnifeHighlight", Color3.new(1, 0, 0))
-            elseif hasGun then
-                disableHighlight(char, "KnifeHighlight")
-                disableHighlight(char, "DefaultHighlight")
-                getHighlight(char, "GunHighlight", Color3.new(0, 0, 1))
-            else
-                disableHighlight(char, "KnifeHighlight")
-                disableHighlight(char, "GunHighlight")
-                getHighlight(char, "DefaultHighlight", Color3.new(0, 1, 0))
-            end
+local function checkAndHighlightGun(instance)
+    if instance.Name == "GunDrop" and instance:IsA("BasePart") then
+        local hl = getOrCreateHighlight(instance, "GunDropHighlight")
+        hl.FillColor = COLOR_GUNDROP
+        hl.Enabled = true
+    elseif instance:IsA("Model") then
+        local gun = instance:FindFirstChild("GunDrop")
+        if gun and gun:IsA("BasePart") then
+            local hl = getOrCreateHighlight(gun, "GunDropHighlight")
+            hl.FillColor = COLOR_GUNDROP
+            hl.Enabled = true
         end
     end
-end)
+end
+
+Workspace.ChildAdded:Connect(checkAndHighlightGun)
+
+for _, child in ipairs(Workspace:GetChildren()) do
+    checkAndHighlightGun(child)
+end
