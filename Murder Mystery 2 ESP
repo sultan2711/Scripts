@@ -5,6 +5,10 @@ local Workspace = game:GetService("Workspace")
 local trackedKnives = {}
 local trackedGuns = {}
 
+-- Переменные для отслеживания выпавшего пистолета
+local gunDroppedThisRound = false
+local newHeroUserId = nil
+
 local function getHighlight(target, name, color)
     local highlight = target:FindFirstChild(name)
     if not highlight then
@@ -16,6 +20,8 @@ local function getHighlight(target, name, color)
         highlight.OutlineTransparency = 0
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Parent = target
+    else
+        highlight.FillColor = color
     end
     return highlight
 end
@@ -32,18 +38,27 @@ local function highlightGunDropDirect(gunDropPart)
 end
 
 local function scanForGun()
+    local foundGunDrop = false
+
     for _, child in pairs(Workspace:GetChildren()) do
         if child:IsA("Model") then
             local gun = child:FindFirstChild("GunDrop")
             if gun and gun:IsA("BasePart") then
                 highlightGunDropDirect(gun)
+                foundGunDrop = true
             end
         end
     end
-    
+
     local directGun = Workspace:FindFirstChild("GunDrop")
     if directGun and directGun:IsA("BasePart") then
         highlightGunDropDirect(directGun)
+        foundGunDrop = true
+    end
+
+    -- Если хотя бы раз за раунд появился GunDrop на карте
+    if foundGunDrop then
+        gunDroppedThisRound = true
     end
 end
 
@@ -56,7 +71,7 @@ RunService.Heartbeat:Connect(function()
             local hasGun = false
             local knifeLoc = ""
             local gunLoc = ""
-            
+
             if player:FindFirstChild("Backpack") then
                 if player.Backpack:FindFirstChild("Knife") then
                     hasKnife = true
@@ -67,7 +82,7 @@ RunService.Heartbeat:Connect(function()
                     gunLoc = "Backpack"
                 end
             end
-            
+
             if player.Character:FindFirstChild("Knife") then
                 hasKnife = true
                 knifeLoc = "Character"
@@ -76,12 +91,18 @@ RunService.Heartbeat:Connect(function()
                 hasGun = true
                 gunLoc = "Character"
             end
-            
+
+            -- Проверяем, кто поднял пистолет с земли
+            if hasGun and gunDroppedThisRound and not newHeroUserId then
+                newHeroUserId = player.UserId
+            end
+
+            -- 1. Убийца (Нож) — Красный
             if hasKnife then
                 removeHighlight(player.Character, "GunHighlight")
                 removeHighlight(player.Character, "DefaultHighlight")
                 getHighlight(player.Character, "KnifeHighlight", Color3.new(1, 0, 0)).Enabled = true
-                
+
                 if trackedKnives[player.UserId] ~= knifeLoc then
                     trackedKnives[player.UserId] = knifeLoc
                 end
@@ -91,11 +112,15 @@ RunService.Heartbeat:Connect(function()
                     trackedKnives[player.UserId] = nil
                 end
             end
-            
+
+            -- 2. Шериф / Игрок с пистолетом
             if hasGun and not hasKnife then
                 removeHighlight(player.Character, "DefaultHighlight")
-                getHighlight(player.Character, "GunHighlight", Color3.new(0, 0, 1)).Enabled = true
                 
+                -- Если это игрок, подібравший пистолет — ЖЁЛТЫЙ (1, 1, 0), иначе обычный Шериф — СИНИЙ (0, 0, 1)
+                local gunColor = (player.UserId == newHeroUserId) and Color3.new(1, 1, 0) or Color3.new(0, 0, 1)
+                getHighlight(player.Character, "GunHighlight", gunColor).Enabled = true
+
                 if trackedGuns[player.UserId] ~= gunLoc then
                     trackedGuns[player.UserId] = gunLoc
                 end
@@ -105,10 +130,26 @@ RunService.Heartbeat:Connect(function()
                     trackedGuns[player.UserId] = nil
                 end
             end
-            
+
+            -- 3. Мирный — Зелёный
             if not hasKnife and not hasGun then
                 getHighlight(player.Character, "DefaultHighlight", Color3.new(0, 1, 0)).Enabled = true
             end
         end
     end
 end)
+
+-- Авто-сброс статуса подбора при начале нового раунда (когда кто-то умирает/возрождается)
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        gunDroppedThisRound = false
+        newHeroUserId = nil
+    end)
+end)
+
+for _, player in pairs(Players:GetPlayers()) do
+    player.CharacterAdded:Connect(function()
+        gunDroppedThisRound = false
+        newHeroUserId = nil
+    end)
+end
