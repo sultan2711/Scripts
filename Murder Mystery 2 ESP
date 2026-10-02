@@ -5,9 +5,6 @@ local Workspace = game:GetService("Workspace")
 local trackedKnives = {}
 local trackedGuns = {}
 
-local gunDroppedThisRound = false
-local newHeroUserId = nil
-
 local function getHighlight(target, name, color)
     local highlight = target:FindFirstChild(name)
     if not highlight then
@@ -19,8 +16,6 @@ local function getHighlight(target, name, color)
         highlight.OutlineTransparency = 0
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Parent = target
-    else
-        highlight.FillColor = color
     end
     return highlight
 end
@@ -37,14 +32,11 @@ local function highlightGunDropDirect(gunDropPart)
 end
 
 local function scanForGun()
-    local foundGunDrop = false
-
-    for _, child in pairs(Workspace:GetChildren()) do
+    for _, child in ipairs(Workspace:GetChildren()) do
         if child:IsA("Model") then
             local gun = child:FindFirstChild("GunDrop")
             if gun and gun:IsA("BasePart") then
                 highlightGunDropDirect(gun)
-                foundGunDrop = true
             end
         end
     end
@@ -52,30 +44,26 @@ local function scanForGun()
     local directGun = Workspace:FindFirstChild("GunDrop")
     if directGun and directGun:IsA("BasePart") then
         highlightGunDropDirect(directGun)
-        foundGunDrop = true
-    end
-
-    if foundGunDrop then
-        gunDroppedThisRound = true
     end
 end
 
 RunService.Heartbeat:Connect(function()
     scanForGun()
 
-    for _, player in pairs(Players:GetPlayers()) do
+    for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Players.LocalPlayer and player.Character then
             local hasKnife = false
             local hasGun = false
             local knifeLoc = ""
             local gunLoc = ""
 
-            if player:FindFirstChild("Backpack") then
-                if player.Backpack:FindFirstChild("Knife") then
+            local backpack = player:FindFirstChild("Backpack")
+            if backpack then
+                if backpack:FindFirstChild("Knife") then
                     hasKnife = true
                     knifeLoc = "Backpack"
                 end
-                if player.Backpack:FindFirstChild("Gun") then
+                if backpack:FindFirstChild("Gun") then
                     hasGun = true
                     gunLoc = "Backpack"
                 end
@@ -88,10 +76,6 @@ RunService.Heartbeat:Connect(function()
             if player.Character:FindFirstChild("Gun") then
                 hasGun = true
                 gunLoc = "Character"
-            end
-
-            if hasGun and gunDroppedThisRound and not newHeroUserId then
-                newHeroUserId = player.UserId
             end
 
             if hasKnife then
@@ -111,9 +95,7 @@ RunService.Heartbeat:Connect(function()
 
             if hasGun and not hasKnife then
                 removeHighlight(player.Character, "DefaultHighlight")
-                
-                local gunColor = (player.UserId == newHeroUserId) and Color3.new(1, 1, 0) or Color3.new(0, 0, 1)
-                getHighlight(player.Character, "GunHighlight", gunColor).Enabled = true
+                getHighlight(player.Character, "GunHighlight", Color3.new(0, 0, 1)).Enabled = true
 
                 if trackedGuns[player.UserId] ~= gunLoc then
                     trackedGuns[player.UserId] = gunLoc
@@ -131,17 +113,3 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
-
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
-        gunDroppedThisRound = false
-        newHeroUserId = nil
-    end)
-end)
-
-for _, player in pairs(Players:GetPlayers()) do
-    player.CharacterAdded:Connect(function()
-        gunDroppedThisRound = false
-        newHeroUserId = nil
-    end)
-end
