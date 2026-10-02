@@ -1,74 +1,119 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local LocalPlayer = Players.LocalPlayer
+local trackedKnives = {}
+local trackedGuns = {}
 
-local function applyHighlight(target, name, color)
+local function getHighlight(target, name, color)
     local highlight = target:FindFirstChild(name)
     if not highlight then
         highlight = Instance.new("Highlight")
         highlight.Name = name
-        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillColor = color
+        highlight.OutlineColor = Color3.new(1, 1, 1)
         highlight.FillTransparency = 0.5
         highlight.OutlineTransparency = 0
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Parent = target
     end
-    
-    for _, child in ipairs(target:GetChildren()) do
-        if child:IsA("Highlight") and child.Name ~= name then
-            child.Enabled = false
-        end
-    end
-
-    highlight.FillColor = color
-    highlight.Enabled = true
+    return highlight
 end
 
-local function updatePlayerHighlight(player)
-    if player == LocalPlayer then return end
-    
-    local char = player.Character
-    if not char or not char:Parent() then return end
-
-    local backpack = player:FindFirstChildOfClass("Backpack")
-
-    local hasKnife = (backpack and backpack:FindFirstChild("Knife")) or char:FindFirstChild("Knife")
-    local hasGun = (backpack and backpack:FindFirstChild("Gun")) or char:FindFirstChild("Gun")
-
-    if hasKnife then
-        applyHighlight(char, "RoleHighlight", Color3.fromRGB(255, 0, 0))
-    elseif hasGun then
-        applyHighlight(char, "RoleHighlight", Color3.fromRGB(0, 100, 255))
-    else
-        applyHighlight(char, "RoleHighlight", Color3.fromRGB(0, 255, 0))
+local function removeHighlight(target, name)
+    local highlight = target:FindFirstChild(name)
+    if highlight then
+        highlight:Destroy()
     end
 end
 
-local function checkGunDrop(object)
-    if object.Name == "GunDrop" and object:IsA("BasePart") then
-        applyHighlight(object, "RoleHighlight", Color3.fromRGB(255, 255, 0))
-    elseif object:IsA("Model") then
-        local gun = object:FindFirstChild("GunDrop")
-        if gun and gun:IsA("BasePart") then
-            applyHighlight(gun, "RoleHighlight", Color3.fromRGB(255, 255, 0))
+local function highlightGunDropDirect(gunDropPart)
+    getHighlight(gunDropPart, "GunDropHighlight", Color3.new(1, 1, 0)).Enabled = true
+end
+
+local function scanForGun()
+    for _, child in ipairs(Workspace:GetChildren()) do
+        if child:IsA("Model") then
+            local gun = child:FindFirstChild("GunDrop")
+            if gun and gun:IsA("BasePart") then
+                highlightGunDropDirect(gun)
+            end
         end
+    end
+
+    local directGun = Workspace:FindFirstChild("GunDrop")
+    if directGun and directGun:IsA("BasePart") then
+        highlightGunDropDirect(directGun)
     end
 end
 
-Workspace.ChildAdded:Connect(function(child)
-    task.defer(checkGunDrop, child)
-end)
+RunService.Heartbeat:Connect(function()
+    scanForGun()
 
-for _, child in ipairs(Workspace:GetChildren()) do
-    checkGunDrop(child)
-end
+    local localPlayer = Players.LocalPlayer
 
-task.spawn(function()
-    while true do
-        for _, player in ipairs(Players:GetPlayers()) do
-            updatePlayerHighlight(player)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            local character = player.Character
+            local backpack = player:FindFirstChildOfClass("Backpack")
+
+            local hasKnife = false
+            local hasGun = false
+            local knifeLoc = ""
+            local gunLoc = ""
+
+            if backpack then
+                if backpack:FindFirstChild("Knife") then
+                    hasKnife = true
+                    knifeLoc = "Backpack"
+                end
+                if backpack:FindFirstChild("Gun") then
+                    hasGun = true
+                    gunLoc = "Backpack"
+                end
+            end
+
+            if character:FindFirstChild("Knife") then
+                hasKnife = true
+                knifeLoc = "Character"
+            end
+            if character:FindFirstChild("Gun") then
+                hasGun = true
+                gunLoc = "Character"
+            end
+
+            if hasKnife then
+                removeHighlight(character, "GunHighlight")
+                removeHighlight(character, "DefaultHighlight")
+                getHighlight(character, "KnifeHighlight", Color3.new(1, 0, 0)).Enabled = true
+
+                if trackedKnives[player.UserId] ~= knifeLoc then
+                    trackedKnives[player.UserId] = knifeLoc
+                end
+            else
+                removeHighlight(character, "KnifeHighlight")
+                if trackedKnives[player.UserId] then
+                    trackedKnives[player.UserId] = nil
+                end
+            end
+
+            if hasGun and not hasKnife then
+                removeHighlight(character, "DefaultHighlight")
+                getHighlight(character, "GunHighlight", Color3.new(0, 0, 1)).Enabled = true
+
+                if trackedGuns[player.UserId] ~= gunLoc then
+                    trackedGuns[player.UserId] = gunLoc
+                end
+            else
+                removeHighlight(character, "GunHighlight")
+                if trackedGuns[player.UserId] then
+                    trackedGuns[player.UserId] = nil
+                end
+            end
+
+            if not hasKnife and not hasGun then
+                getHighlight(character, "DefaultHighlight", Color3.new(0, 1, 0)).Enabled = true
+            end
         end
-        task.wait(0.25)
     end
 end)
