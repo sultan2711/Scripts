@@ -2,104 +2,73 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
-local HIGHLIGHT_NAME = "RoleHighlight"
 
-local COLOR_MURDERER = Color3.fromRGB(255, 0, 0)
-local COLOR_SHERIFF  = Color3.fromRGB(0, 0, 255)
-local COLOR_INNOCENT = Color3.fromRGB(0, 255, 0)
-local COLOR_GUNDROP  = Color3.fromRGB(255, 255, 0)
-
-local function getOrCreateHighlight(target, name)
+local function applyHighlight(target, name, color)
     local highlight = target:FindFirstChild(name)
     if not highlight then
         highlight = Instance.new("Highlight")
         highlight.Name = name
-        highlight.OutlineColor = Color3.new(1, 1, 1)
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
         highlight.FillTransparency = 0.5
         highlight.OutlineTransparency = 0
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Parent = target
     end
-    return highlight
+    
+    for _, child in ipairs(target:GetChildren()) do
+        if child:IsA("Highlight") and child.Name ~= name then
+            child.Enabled = false
+        end
+    end
+
+    highlight.FillColor = color
+    highlight.Enabled = true
 end
 
 local function updatePlayerHighlight(player)
     if player == LocalPlayer then return end
     
     local char = player.Character
-    if not char then return end
+    if not char or not char:Parent() then return end
 
-    local backpack = player:FindFirstChild("Backpack")
+    local backpack = player:FindFirstChildOfClass("Backpack")
 
     local hasKnife = (backpack and backpack:FindFirstChild("Knife")) or char:FindFirstChild("Knife")
     local hasGun = (backpack and backpack:FindFirstChild("Gun")) or char:FindFirstChild("Gun")
 
-    local highlight = getOrCreateHighlight(char, HIGHLIGHT_NAME)
-
     if hasKnife then
-        highlight.FillColor = COLOR_MURDERER
-        highlight.Enabled = true
+        applyHighlight(char, "RoleHighlight", Color3.fromRGB(255, 0, 0))
     elseif hasGun then
-        highlight.FillColor = COLOR_SHERIFF
-        highlight.Enabled = true
+        applyHighlight(char, "RoleHighlight", Color3.fromRGB(0, 100, 255))
     else
-        highlight.FillColor = COLOR_INNOCENT
-        highlight.Enabled = true
+        applyHighlight(char, "RoleHighlight", Color3.fromRGB(0, 255, 0))
     end
 end
 
-local function setupPlayerListeners(player)
-    if player == LocalPlayer then return end
-
-    local function onCharacterAdded(char)
-        updatePlayerHighlight(player)
-
-        char.ChildAdded:Connect(function() updatePlayerHighlight(player) end)
-        char.ChildRemoved:Connect(function() updatePlayerHighlight(player) end)
-    end
-
-    if player.Character then
-        onCharacterAdded(player.Character)
-    end
-    player.CharacterAdded:Connect(onCharacterAdded)
-
-    player.ChildAdded:Connect(function(child)
-        if child.Name == "Backpack" then
-            child.ChildAdded:Connect(function() updatePlayerHighlight(player) end)
-            child.ChildRemoved:Connect(function() updatePlayerHighlight(player) end)
-            updatePlayerHighlight(player)
-        end
-    end)
-
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        backpack.ChildAdded:Connect(function() updatePlayerHighlight(player) end)
-        backpack.ChildRemoved:Connect(function() updatePlayerHighlight(player) end)
-    end
-end
-
-for _, player in ipairs(Players:GetPlayers()) do
-    setupPlayerListeners(player)
-end
-Players.PlayerAdded:Connect(setupPlayerListeners)
-
-local function checkAndHighlightGun(instance)
-    if instance.Name == "GunDrop" and instance:IsA("BasePart") then
-        local hl = getOrCreateHighlight(instance, "GunDropHighlight")
-        hl.FillColor = COLOR_GUNDROP
-        hl.Enabled = true
-    elseif instance:IsA("Model") then
-        local gun = instance:FindFirstChild("GunDrop")
+local function checkGunDrop(object)
+    if object.Name == "GunDrop" and object:IsA("BasePart") then
+        applyHighlight(object, "RoleHighlight", Color3.fromRGB(255, 255, 0))
+    elseif object:IsA("Model") then
+        local gun = object:FindFirstChild("GunDrop")
         if gun and gun:IsA("BasePart") then
-            local hl = getOrCreateHighlight(gun, "GunDropHighlight")
-            hl.FillColor = COLOR_GUNDROP
-            hl.Enabled = true
+            applyHighlight(gun, "RoleHighlight", Color3.fromRGB(255, 255, 0))
         end
     end
 end
 
-Workspace.ChildAdded:Connect(checkAndHighlightGun)
+Workspace.ChildAdded:Connect(function(child)
+    task.defer(checkGunDrop, child)
+end)
 
 for _, child in ipairs(Workspace:GetChildren()) do
-    checkAndHighlightGun(child)
+    checkGunDrop(child)
 end
+
+task.spawn(function()
+    while true do
+        for _, player in ipairs(Players:GetPlayers()) do
+            updatePlayerHighlight(player)
+        end
+        task.wait(0.25)
+    end
+end)
