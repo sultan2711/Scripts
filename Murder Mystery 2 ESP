@@ -5,7 +5,6 @@ local Workspace = game:GetService("Workspace")
 local trackedKnives = {}
 local trackedGuns = {}
 
--- Переменные для отслеживания выпавшего пистолета
 local gunDroppedThisRound = false
 local newHeroUserId = nil
 
@@ -56,7 +55,6 @@ local function scanForGun()
         foundGunDrop = true
     end
 
-    -- Если хотя бы раз за раунд появился GunDrop на карте
     if foundGunDrop then
         gunDroppedThisRound = true
     end
@@ -92,12 +90,10 @@ RunService.Heartbeat:Connect(function()
                 gunLoc = "Character"
             end
 
-            -- Проверяем, кто поднял пистолет с земли
             if hasGun and gunDroppedThisRound and not newHeroUserId then
                 newHeroUserId = player.UserId
             end
 
-            -- 1. Убийца (Нож) — Красный
             if hasKnife then
                 removeHighlight(player.Character, "GunHighlight")
                 removeHighlight(player.Character, "DefaultHighlight")
@@ -113,11 +109,9 @@ RunService.Heartbeat:Connect(function()
                 end
             end
 
-            -- 2. Шериф / Игрок с пистолетом
             if hasGun and not hasKnife then
                 removeHighlight(player.Character, "DefaultHighlight")
                 
-                -- Если это игрок, подібравший пистолет — ЖЁЛТЫЙ (1, 1, 0), иначе обычный Шериф — СИНИЙ (0, 0, 1)
                 local gunColor = (player.UserId == newHeroUserId) and Color3.new(1, 1, 0) or Color3.new(0, 0, 1)
                 getHighlight(player.Character, "GunHighlight", gunColor).Enabled = true
 
@@ -131,7 +125,6 @@ RunService.Heartbeat:Connect(function()
                 end
             end
 
-            -- 3. Мирный — Зелёный
             if not hasKnife and not hasGun then
                 getHighlight(player.Character, "DefaultHighlight", Color3.new(0, 1, 0)).Enabled = true
             end
@@ -139,7 +132,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Авто-сброс статуса подбора при начале нового раунда (когда кто-то умирает/возрождается)
 Players.PlayerAdded:Connect(function(player)
     player.CharacterAdded:Connect(function()
         gunDroppedThisRound = false
