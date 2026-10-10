@@ -1,0 +1,296 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+
+local FLY_SPEED = 20
+local MAX_SEARCH_RADIUS = 500 -- Радиус поиска в студах
+local RESET_COOLDOWN = 40 -- КД ресета в секундах
+
+-- Лобби (запрещенная зона)
+local LOBBY_POS = Vector3.new(8, 506, -26)
+local LOBBY_RADIUS = 200
+
+local isFarmEnabled = false
+local currentTween = nil
+local noclipConnection = nil
+
+-- === СОЗДАНИЕ GUI ===
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CoinFarmGui"
+screenGui.ResetOnSpawn = false
+
+if gethui then
+	screenGui.Parent = gethui()
+elseif syn and syn.protect_gui then
+	syn.protect_gui(screenGui)
+	screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+else
+	screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 180, 0, 60)
+frame.Position = UDim2.new(0, 20, 0, 20)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleButton"
+toggleButton.Size = UDim2.new(1, -16, 1, -16)
+toggleButton.Position = UDim2.new(0, 8, 0, 8)
+toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+toggleButton.Text = "Фарм монеток: ВЫКЛ"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextSize = 14
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.Parent = frame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 6)
+btnCorner.Parent = toggleButton
+
+-- === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+local function getRoot()
+	local char = LocalPlayer.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid()
+	local char = LocalPlayer.Character
+	return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function isPlayerInLobby()
+	local root = getRoot()
+	if not root then return false end
+	return (root.Position - LOBBY_POS).Magnitude <= LOBBY_RADIUS
+end
+
+local function applyRagdollAndNoclip(char, hum)
+	if hum then
+		hum.AutoRotate = false
+		hum.PlatformStand = true
+		hum:ChangeState(Enum.HumanoidStateType.Physics)
+	end
+
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+end
+
+local function restoreCharacter(char, hum)
+	if hum then
+		hum.AutoRotate = true
+		hum.PlatformStand = false
+		hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end
+
+	if char then
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = true
+			end
+		end
+	end
+end
+
+local function findCoinContainer()
+	for _, object in ipairs(Workspace:GetDescendants()) do
+		if (object:IsA("Folder") or object:IsA("Model")) and object.Name == "CoinContainer" then
+			return object
+		end
+	end
+	return nil
+end
+
+local function isCoinValid(coin)
+	return coin and coin.Parent and coin:IsDescendantOf(Workspace) and coin:FindFirstChildOfClass("TouchTransmitter")
+end
+
+local function getClosestCoin()
+	local root = getRoot()
+	if not root or isPlayerInLobby() then return nil end
+
+	local coinContainer = findCoinContainer()
+	if not coinContainer then return nil end
+
+	local closestCoin = nil
+	local shortestDistance = MAX_SEARCH_RADIUS
+
+	for _, child in ipairs(coinContainer:GetChildren()) do
+		if child:IsA("BasePart") and child.Name == "Coin_Server" and isCoinValid(child) then
+			local distToLobby = (child.Position - LOBBY_POS).Magnitude
+			if distToLobby > LOBBY_RADIUS then
+				local distance = (root.Position - child.Position).Magnitude
+				if distance < shortestDistance then
+					shortestDistance = distance
+					closestCoin = child
+				end
+			end
+		end
+	end
+
+	return closestCoin
+end
+
+local function triggerTouchInterest(part)
+	local root = getRoot()
+	if not root or not part then return end
+
+	local touch = part:FindFirstChildOfClass("TouchTransmitter")
+	if touch then
+		firetouchinterest(root, part, 0)
+		task.wait(0.05)
+		firetouchinterest(root, part, 1)
+	end
+end
+
+local function resetPlayer()
+	local hum = getHumanoid()
+	if hum and hum.Health > 0 then
+		hum:TakeDamage(hum.MaxHealth)
+	end
+end
+
+-- === ОСНОВНОЙ ЦИКЛ ===
+local function startNoclip()
+	if not noclipConnection then
+		noclipConnection = RunService.Stepped:Connect(function()
+			if isFarmEnabled and LocalPlayer.Character and not isPlayerInLobby() then
+				applyRagdollAndNoclip(LocalPlayer.Character, getHumanoid())
+			end
+		end)
+	end
+end
+
+local function stopNoclip()
+	if noclipConnection then
+		noclipConnection:Disconnect()
+		noclipConnection = nil
+	end
+	if LocalPlayer.Character then
+		restoreCharacter(LocalPlayer.Character, getHumanoid())
+	end
+end
+
+local function collectCoins()
+	while true do
+		if isFarmEnabled then
+			local char = LocalPlayer.Character
+			local root = getRoot()
+			local hum = getHumanoid()
+
+			if char and root and hum and hum.Health > 0 then
+				if isPlayerInLobby() then
+					stopNoclip()
+					task.wait(1)
+				else
+					startNoclip()
+
+					local coin = getClosestCoin()
+					if coin and isFarmEnabled then
+						local distance = (root.Position - coin.Position).Magnitude
+						local targetCFrame = CFrame.new(coin.Position)
+
+						-- Прямой полёт к монетке без ухода под землю
+						if distance > 1 and isFarmEnabled and isCoinValid(coin) then
+							currentTween = TweenService:Create(
+								root,
+								TweenInfo.new(distance / FLY_SPEED, Enum.EasingStyle.Linear),
+								{CFrame = targetCFrame}
+							)
+							currentTween:Play()
+							currentTween.Completed:Wait()
+						end
+
+						if isFarmEnabled and isCoinValid(coin) then
+							triggerTouchInterest(coin)
+						end
+					else
+						-- На карте нет монеток — удерживаем высоту и ждем КД 40 секунд перед ресетом
+						if isFarmEnabled and not isPlayerInLobby() then
+							local bv = Instance.new("BodyVelocity")
+							bv.Name = "AntiGravityBV"
+							bv.Velocity = Vector3.zero
+							bv.MaxForce = Vector3.new(0, math.huge, 0)
+							bv.Parent = root
+							
+							local hasFoundCoin = false
+							for i = 1, RESET_COOLDOWN do
+								if not isFarmEnabled or isPlayerInLobby() then break end
+								task.wait(1)
+								if getClosestCoin() then
+									hasFoundCoin = true
+									break
+								end
+							end
+
+							bv:Destroy()
+
+							if isFarmEnabled and not hasFoundCoin and not isPlayerInLobby() then
+								stopNoclip()
+								resetPlayer()
+								task.wait(2)
+							end
+						end
+					end
+				end
+			else
+				task.wait(1)
+			end
+		else
+			task.wait(0.5)
+		end
+		task.wait(0.05)
+	end
+end
+
+-- === ОБРАБОТЧИК КНОПКИ ===
+toggleButton.MouseButton1Click:Connect(function()
+	isFarmEnabled = not isFarmEnabled
+
+	if isFarmEnabled then
+		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+		toggleButton.Text = "Фарм монеток: ВКЛ"
+	else
+		toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+		toggleButton.Text = "Фарм монеток: ВЫКЛ"
+
+		if currentTween then
+			currentTween:Cancel()
+			currentTween = nil
+		end
+
+		local root = getRoot()
+		if root and root:FindFirstChild("AntiGravityBV") then
+			root.AntiGravityBV:Destroy()
+		end
+
+		stopNoclip()
+	end
+end)
+
+task.spawn(collectCoins)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+	task.wait(1)
+	if not isFarmEnabled or isPlayerInLobby() then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		restoreCharacter(char, hum)
+	end
+end)
