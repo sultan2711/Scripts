@@ -6,18 +6,17 @@ local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
 local FLY_SPEED = 20
-local MAX_SEARCH_RADIUS = 500 -- Радиус поиска в студах
-local RESET_COOLDOWN = 40 -- КД ресета в секундах
+local MAX_SEARCH_RADIUS = 500
+local MAX_FAILED_ATTEMPTS = 5
 
--- Лобби (запрещенная зона)
 local LOBBY_POS = Vector3.new(8, 506, -26)
 local LOBBY_RADIUS = 200
 
 local isFarmEnabled = false
 local currentTween = nil
 local noclipConnection = nil
+local failedAttempts = 0
 
--- === СОЗДАНИЕ GUI ===
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CoinFarmGui"
 screenGui.ResetOnSpawn = false
@@ -60,7 +59,6 @@ local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 6)
 btnCorner.Parent = toggleButton
 
--- === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 local function getRoot()
 	local char = LocalPlayer.Character
 	return char and char:FindFirstChild("HumanoidRootPart")
@@ -167,7 +165,6 @@ local function resetPlayer()
 	end
 end
 
--- === ОСНОВНОЙ ЦИКЛ ===
 local function startNoclip()
 	if not noclipConnection then
 		noclipConnection = RunService.Stepped:Connect(function()
@@ -198,6 +195,7 @@ local function collectCoins()
 			if char and root and hum and hum.Health > 0 then
 				if isPlayerInLobby() then
 					stopNoclip()
+					failedAttempts = 0
 					task.wait(1)
 				else
 					startNoclip()
@@ -207,7 +205,6 @@ local function collectCoins()
 						local distance = (root.Position - coin.Position).Magnitude
 						local targetCFrame = CFrame.new(coin.Position)
 
-						-- Прямой полёт к монетке без ухода под землю
 						if distance > 1 and isFarmEnabled and isCoinValid(coin) then
 							currentTween = TweenService:Create(
 								root,
@@ -220,9 +217,13 @@ local function collectCoins()
 
 						if isFarmEnabled and isCoinValid(coin) then
 							triggerTouchInterest(coin)
+							failedAttempts = 0
+						else
+							failedAttempts = failedAttempts + 1
 						end
 					else
-						-- На карте нет монеток — удерживаем высоту и ждем КД 40 секунд перед ресетом
+						failedAttempts = failedAttempts + 1
+
 						if isFarmEnabled and not isPlayerInLobby() then
 							local bv = Instance.new("BodyVelocity")
 							bv.Name = "AntiGravityBV"
@@ -230,24 +231,19 @@ local function collectCoins()
 							bv.MaxForce = Vector3.new(0, math.huge, 0)
 							bv.Parent = root
 							
-							local hasFoundCoin = false
-							for i = 1, RESET_COOLDOWN do
-								if not isFarmEnabled or isPlayerInLobby() then break end
+							while isFarmEnabled and not isPlayerInLobby() and not getClosestCoin() do
 								task.wait(1)
-								if getClosestCoin() then
-									hasFoundCoin = true
-									break
-								end
 							end
 
 							bv:Destroy()
-
-							if isFarmEnabled and not hasFoundCoin and not isPlayerInLobby() then
-								stopNoclip()
-								resetPlayer()
-								task.wait(2)
-							end
 						end
+					end
+
+					if failedAttempts >= MAX_FAILED_ATTEMPTS and isFarmEnabled and not isPlayerInLobby() then
+						stopNoclip()
+						resetPlayer()
+						failedAttempts = 0
+						task.wait(2)
 					end
 				end
 			else
@@ -260,13 +256,13 @@ local function collectCoins()
 	end
 end
 
--- === ОБРАБОТЧИК КНОПКИ ===
 toggleButton.MouseButton1Click:Connect(function()
 	isFarmEnabled = not isFarmEnabled
 
 	if isFarmEnabled then
 		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
 		toggleButton.Text = "Фарм монеток: ВКЛ"
+		failedAttempts = 0
 	else
 		toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 		toggleButton.Text = "Фарм монеток: ВЫКЛ"
@@ -289,6 +285,7 @@ task.spawn(collectCoins)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
 	task.wait(1)
+	failedAttempts = 0
 	if not isFarmEnabled or isPlayerInLobby() then
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		restoreCharacter(char, hum)
