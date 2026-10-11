@@ -7,7 +7,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local FLY_SPEED = 20
 local MAX_SEARCH_RADIUS = 500
-local TWEEN_TIMEOUT = 4
+local COLLECTION_TIMEOUT = 4
 
 local LOBBY_POS = Vector3.new(8, 506, -26)
 local LOBBY_RADIUS = 200
@@ -204,36 +204,30 @@ local function collectCoins()
 						local targetCFrame = CFrame.new(coin.Position)
 
 						if distance > 1 and isFarmEnabled and isCoinValid(coin) then
-							local tweenTime = distance / FLY_SPEED
 							currentTween = TweenService:Create(
 								root,
-								TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
+								TweenInfo.new(distance / FLY_SPEED, Enum.EasingStyle.Linear),
 								{CFrame = targetCFrame}
 							)
 							currentTween:Play()
-
-							local startTime = tick()
-							local timedOut = false
-
-							while currentTween.PlaybackState == Enum.PlaybackState.Playing do
-								task.wait(0.05)
-								if tick() - startTime > TWEEN_TIMEOUT or not isFarmEnabled or not isCoinValid(coin) then
-									timedOut = true
-									currentTween:Cancel()
-									break
-								end
-							end
-
-							if timedOut then
-								stopNoclip()
-								resetPlayer()
-								task.wait(2)
-								continue
-							end
+							currentTween.Completed:Wait()
 						end
 
 						if isFarmEnabled and isCoinValid(coin) then
-							triggerTouchInterest(coin)
+							local startTime = tick()
+							
+							while isFarmEnabled and isCoinValid(coin) do
+								triggerTouchInterest(coin)
+								
+								if tick() - startTime > COLLECTION_TIMEOUT then
+									stopNoclip()
+									resetPlayer()
+									task.wait(2)
+									break
+								end
+								
+								task.wait(0.2)
+							end
 						end
 					else
 						if isFarmEnabled and not isPlayerInLobby() then
