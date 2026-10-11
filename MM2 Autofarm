@@ -7,7 +7,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local FLY_SPEED = 20
 local MAX_SEARCH_RADIUS = 500
-local MAX_FAILED_ATTEMPTS = 5
+local TWEEN_TIMEOUT = 4
 
 local LOBBY_POS = Vector3.new(8, 506, -26)
 local LOBBY_RADIUS = 200
@@ -15,7 +15,6 @@ local LOBBY_RADIUS = 200
 local isFarmEnabled = false
 local currentTween = nil
 local noclipConnection = nil
-local failedAttempts = 0
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CoinFarmGui"
@@ -195,7 +194,6 @@ local function collectCoins()
 			if char and root and hum and hum.Health > 0 then
 				if isPlayerInLobby() then
 					stopNoclip()
-					failedAttempts = 0
 					task.wait(1)
 				else
 					startNoclip()
@@ -206,24 +204,38 @@ local function collectCoins()
 						local targetCFrame = CFrame.new(coin.Position)
 
 						if distance > 1 and isFarmEnabled and isCoinValid(coin) then
+							local tweenTime = distance / FLY_SPEED
 							currentTween = TweenService:Create(
 								root,
-								TweenInfo.new(distance / FLY_SPEED, Enum.EasingStyle.Linear),
+								TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
 								{CFrame = targetCFrame}
 							)
 							currentTween:Play()
-							currentTween.Completed:Wait()
+
+							local startTime = tick()
+							local timedOut = false
+
+							while currentTween.PlaybackState == Enum.PlaybackState.Playing do
+								task.wait(0.05)
+								if tick() - startTime > TWEEN_TIMEOUT or not isFarmEnabled or not isCoinValid(coin) then
+									timedOut = true
+									currentTween:Cancel()
+									break
+								end
+							end
+
+							if timedOut then
+								stopNoclip()
+								resetPlayer()
+								task.wait(2)
+								continue
+							end
 						end
 
 						if isFarmEnabled and isCoinValid(coin) then
 							triggerTouchInterest(coin)
-							failedAttempts = 0
-						else
-							failedAttempts = failedAttempts + 1
 						end
 					else
-						failedAttempts = failedAttempts + 1
-
 						if isFarmEnabled and not isPlayerInLobby() then
 							local bv = Instance.new("BodyVelocity")
 							bv.Name = "AntiGravityBV"
@@ -237,13 +249,6 @@ local function collectCoins()
 
 							bv:Destroy()
 						end
-					end
-
-					if failedAttempts >= MAX_FAILED_ATTEMPTS and isFarmEnabled and not isPlayerInLobby() then
-						stopNoclip()
-						resetPlayer()
-						failedAttempts = 0
-						task.wait(2)
 					end
 				end
 			else
@@ -262,7 +267,6 @@ toggleButton.MouseButton1Click:Connect(function()
 	if isFarmEnabled then
 		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
 		toggleButton.Text = "Фарм монеток: ВКЛ"
-		failedAttempts = 0
 	else
 		toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 		toggleButton.Text = "Фарм монеток: ВЫКЛ"
@@ -285,7 +289,6 @@ task.spawn(collectCoins)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
 	task.wait(1)
-	failedAttempts = 0
 	if not isFarmEnabled or isPlayerInLobby() then
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		restoreCharacter(char, hum)
