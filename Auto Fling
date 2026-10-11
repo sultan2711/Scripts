@@ -22,6 +22,8 @@ MainFrame.Size = UDim2.new(0, 200, 0, 110)
 MainFrame.Position = UDim2.new(0.5, -100, 0, 50)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderSizePixel = 0
+MainFrame.Active = true     -- Включает реакцию на ввод
+MainFrame.Draggable = true  -- Включает стандартное перетаскивание мышей
 
 local TextBox = Instance.new("TextBox", MainFrame)
 TextBox.Size = UDim2.new(1, -20, 0, 30)
