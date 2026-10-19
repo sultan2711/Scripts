@@ -106,13 +106,15 @@ local function restoreCharacter(char, hum)
 	end
 end
 
-local function findCoinContainer()
-	for _, object in ipairs(Workspace:GetDescendants()) do
-		if (object:IsA("Folder") or object:IsA("Model")) and object.Name == "CoinContainer" then
-			return object
+local function findCoinContainers()
+	local containers = {}
+	for _, mapFolder in ipairs(Workspace:GetChildren()) do
+		local container = mapFolder:FindFirstChild("CoinContainer")
+		if container and (container:IsA("Folder") or container:IsA("Model")) then
+			table.insert(containers, container)
 		end
 	end
-	return nil
+	return containers
 end
 
 local function isCoinValid(coin)
@@ -123,20 +125,22 @@ local function getClosestCoin()
 	local root = getRoot()
 	if not root or isPlayerInLobby() then return nil end
 
-	local coinContainer = findCoinContainer()
-	if not coinContainer then return nil end
+	local containers = findCoinContainers()
+	if #containers == 0 then return nil end
 
 	local closestCoin = nil
 	local shortestDistance = MAX_SEARCH_RADIUS
 
-	for _, child in ipairs(coinContainer:GetChildren()) do
-		if child:IsA("BasePart") and child.Name == "Coin_Server" and isCoinValid(child) then
-			local distToLobby = (child.Position - LOBBY_POS).Magnitude
-			if distToLobby > LOBBY_RADIUS then
-				local distance = (root.Position - child.Position).Magnitude
-				if distance < shortestDistance then
-					shortestDistance = distance
-					closestCoin = child
+	for _, coinContainer in ipairs(containers) do
+		for _, child in ipairs(coinContainer:GetChildren()) do
+			if child:IsA("BasePart") and child.Name == "Coin_Server" and isCoinValid(child) then
+				local distToLobby = (child.Position - LOBBY_POS).Magnitude
+				if distToLobby > LOBBY_RADIUS then
+					local distance = (root.Position - child.Position).Magnitude
+					if distance < shortestDistance then
+						shortestDistance = distance
+						closestCoin = child
+					end
 				end
 			end
 		end
