@@ -10,20 +10,22 @@ local IS_FLINGING = false
 local ConnectionLoop
 local ConnectionAntiFling
 local savedCFrame = nil
-local tickCounter = 0 
+local tickCounter = 0
+local isSpawning = false 
 
 if CoreGui:FindFirstChild("FlingGui") then CoreGui.FlingGui:Destroy() end
 
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "FlingGui"
+ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 200, 0, 110)
 MainFrame.Position = UDim2.new(0.5, -100, 0, 50)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderSizePixel = 0
-MainFrame.Active = true     -- Включает реакцию на ввод
-MainFrame.Draggable = true  -- Включает стандартное перетаскивание мышей
+MainFrame.Active = true
+MainFrame.Draggable = true
 
 local TextBox = Instance.new("TextBox", MainFrame)
 TextBox.Size = UDim2.new(1, -20, 0, 30)
@@ -89,16 +91,18 @@ local function toggleAntiFling(state)
         return
     end
     
-    ConnectionAntiFling = RunService.Stepped:Connect(function()
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= PLAYER and player.Character then
-                local root = player.Character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    root.CanCollide = false
+    if not ConnectionAntiFling then
+        ConnectionAntiFling = RunService.Stepped:Connect(function()
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= PLAYER and player.Character then
+                    local root = player.Character:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        root.CanCollide = false
+                    end
                 end
             end
-        end
-    end)
+        end)
+    end
 end
 
 StartBtn.MouseButton1Click:Connect(function()
@@ -127,23 +131,22 @@ StartBtn.MouseButton1Click:Connect(function()
         local lastTargetPosition = nil
         local lastTargetVelocity = Vector3.new(0, 0, 0)
 
+        if ConnectionLoop then ConnectionLoop:Disconnect() end
+
         ConnectionLoop = RunService.Heartbeat:Connect(function()
+            if not IS_FLINGING or isSpawning then return end
+
             myChar = PLAYER.Character
             myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
             local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
             
             if not myRoot or not myHum or myHum.Health <= 0 then
-                IS_FLINGING = false
-                StartBtn.Text = "START FLING"
-                StartBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
-                if ConnectionLoop then ConnectionLoop:Disconnect() end
-                toggleAntiFling(false)
+                wasWaitingForRespawn = true
                 resetCamera()
-                savedCFrame = nil
                 return
             end
 
-            local tChar = targetPlayer.Character
+            local tChar = targetPlayer and targetPlayer.Character
             local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
             local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
             
@@ -187,11 +190,8 @@ StartBtn.MouseButton1Click:Connect(function()
                 
                 local finalPosition = currentTargetPosition + predictionOffset + ramOffset
                 
-                if tHum.FloorMaterial == Enum.Material.Air then
-                    finalPosition = Vector3.new(finalPosition.X, currentTargetPosition.Y + 1.5, finalPosition.Z)
-                else
-                    finalPosition = Vector3.new(finalPosition.X, currentTargetPosition.Y + 0.5, finalPosition.Z)
-                end
+                -- Жестко приравниваем высоту к Y цели
+                finalPosition = Vector3.new(finalPosition.X, currentTargetPosition.Y, finalPosition.Z)
                 
                 myRoot.CFrame = CFrame.new(finalPosition, currentTargetPosition)
                 
@@ -215,4 +215,14 @@ StartBtn.MouseButton1Click:Connect(function()
         returnToSafety()
         savedCFrame = nil
     end
+end)
+
+PLAYER.CharacterAdded:Connect(function(char)
+    isSpawning = true
+    local root = char:WaitForChild("HumanoidRootPart", 5)
+    task.wait(1) 
+    if root and IS_FLINGING then
+        savedCFrame = root.CFrame
+    end
+    isSpawning = false
 end)
